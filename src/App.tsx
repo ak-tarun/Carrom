@@ -1,8 +1,9 @@
 // @ts-nocheck
 import React, { useEffect } from 'react';
 import { initializeApp } from "firebase/app";
-import { getDatabase, ref, set, onValue, get, update } from "firebase/database";
+import { getDatabase, ref, set, onValue, get, update, onDisconnect, push, remove } from "firebase/database";
 import { Network } from '@capacitor/network';
+import { App as CapacitorApp } from '@capacitor/app';
 
 let initialized = false;
 
@@ -99,6 +100,122 @@ export default function App() {
         localStorage.setItem('carrom_history', JSON.stringify(history.slice(0, 50))); // Keep last 50
     }
 
+    // Online Presence & Invites
+    let myUserId = localStorage.getItem('carrom_user_id');
+    if (!myUserId) {
+        myUserId = 'user_' + Math.random().toString(36).substring(2, 9);
+        localStorage.setItem('carrom_user_id', myUserId);
+    }
+
+    const myPresenceRef = ref(db, `online_users/${myUserId}`);
+    onDisconnect(myPresenceRef).remove();
+    set(myPresenceRef, {
+        id: myUserId,
+        status: 'online',
+        lastSeen: Date.now()
+    });
+
+    // Listen for online users
+    onValue(ref(db, 'online_users'), (snapshot) => {
+        const users = snapshot.val() || {};
+        const listEl = document.getElementById('online-users-list');
+        if (!listEl) return;
+        
+        const now = Date.now();
+        const activeUsers = Object.values(users).filter(u => u.id !== myUserId && (now - u.lastSeen < 60000)); // Active in last minute
+
+        if (activeUsers.length === 0) {
+            listEl.innerHTML = '<li style="padding: 10px; color: var(--text-muted); text-align: center;">No other players online</li>';
+        } else {
+            listEl.innerHTML = activeUsers.map(u => `
+                <li style="padding: 10px; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center;">
+                    <span style="color: var(--text-main); font-size: 14px;">Player ${u.id.substring(5, 9)}</span>
+                    <button class="lobby-btn" style="padding: 4px 12px; font-size: 12px; margin: 0; width: auto;" onclick="window.sendInvite('${u.id}')">Invite</button>
+                </li>
+            `).join('');
+        }
+    });
+
+    // Keep alive ping
+    setInterval(() => {
+        update(myPresenceRef, { lastSeen: Date.now() });
+    }, 30000);
+
+    // Listen for incoming invites
+    onValue(ref(db, `invites/${myUserId}`), (snapshot) => {
+        const invite = snapshot.val();
+        if (invite && invite.status === 'pending') {
+            document.getElementById('invite-text').innerText = `Player ${invite.from.substring(5, 9)} invited you to play!`;
+            document.getElementById('invite-modal').style.display = 'flex';
+            
+            window.acceptInvite = async () => {
+                await update(ref(db, `invites/${myUserId}`), { status: 'accepted' });
+                document.getElementById('invite-modal').style.display = 'none';
+                
+                // Join the room created by the inviter
+                currentRoom = invite.roomId;
+                myRole = 'guest';
+                gameMode = 'multi';
+                await update(ref(db, `rooms/${currentRoom}`), { status: 'playing' });
+                startGame();
+            };
+            
+            window.declineInvite = async () => {
+                await update(ref(db, `invites/${myUserId}`), { status: 'declined' });
+                document.getElementById('invite-modal').style.display = 'none';
+            };
+        }
+    });
+
+    window.sendInvite = async (targetUserId) => {
+        initAudio();
+        gameMode = 'multi';
+        const errorText = document.getElementById('lobby-error');
+        errorText.innerText = "Sending invite...";
+        
+        try {
+            const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+            currentRoom = code;
+            myRole = 'host';
+            
+            await set(ref(db, `rooms/${code}`), { status: 'waiting', turn: 'host' });
+            
+            // Send the invite
+            await set(ref(db, `invites/${targetUserId}`), {
+                from: myUserId,
+                roomId: code,
+                status: 'pending',
+                timestamp: Date.now()
+            });
+            
+            document.getElementById('panel-main').style.display = 'none';
+            document.getElementById('panel-waiting').style.display = 'block';
+            document.getElementById('room-code-display').innerText = "Waiting for accept...";
+            errorText.innerText = "";
+
+            // Listen for accept/decline
+            const inviteListener = onValue(ref(db, `invites/${targetUserId}`), (snapshot) => {
+                const invite = snapshot.val();
+                if (invite && invite.status === 'accepted') {
+                    startGame();
+                    // Clean up listener (simplified for this context)
+                } else if (invite && invite.status === 'declined') {
+                    document.getElementById('panel-waiting').style.display = 'none';
+                    document.getElementById('panel-main').style.display = 'block';
+                    errorText.innerText = "Invite declined.";
+                }
+            });
+            
+            // Also listen for normal room join just in case
+            onValue(ref(db, `rooms/${code}/status`), (snapshot) => {
+                if(snapshot.val() === 'playing' && !isGameRunning) startGame();
+            });
+        } catch (err) {
+            errorText.innerText = "Error sending invite.";
+            console.error(err);
+        }
+    };
+
     function showHistory() {
         const history = JSON.parse(localStorage.getItem('carrom_history') || '[]');
         const list = document.getElementById('history-list');
@@ -194,6 +311,64 @@ export default function App() {
             osc.start(t); osc.stop(t + 0.25);
         }
     };
+
+    // Capacitor Back Button Handling
+    CapacitorApp.addListener('backButton', ({ canGoBack }) => {
+        const historyModal = document.getElementById('history-modal');
+        const inviteModal = document.getElementById('invite-modal');
+        const gameOverOverlay = document.getElementById('game-over-overlay');
+        const lobbyPanel = document.getElementById('lobby');
+
+        if (inviteModal && inviteModal.style.display === 'flex') {
+            window.declineInvite();
+            return;
+        }
+
+        if (historyModal && historyModal.style.display === 'flex') {
+            historyModal.style.display = 'none';
+            return;
+        }
+
+        if (gameOverOverlay && gameOverOverlay.style.display === 'flex') {
+            // If game over, go back to lobby
+            gameOverOverlay.style.display = 'none';
+            isGameRunning = false;
+            lobbyPanel.style.display = 'flex';
+            document.getElementById('panel-main').style.display = 'block';
+            document.getElementById('panel-waiting').style.display = 'none';
+            return;
+        }
+
+        if (isGameRunning) {
+            // Confirm exit game
+            if (confirm("Are you sure you want to leave the game?")) {
+                isGameRunning = false;
+                lobbyPanel.style.display = 'flex';
+                document.getElementById('panel-main').style.display = 'block';
+                document.getElementById('panel-waiting').style.display = 'none';
+                if (gameMode === 'multi' && currentRoom) {
+                    // Optional: cleanup room or notify opponent
+                    remove(ref(db, `rooms/${currentRoom}`));
+                }
+            }
+            return;
+        }
+
+        if (document.getElementById('panel-waiting').style.display === 'block') {
+            // Cancel waiting
+            document.getElementById('panel-waiting').style.display = 'none';
+            document.getElementById('panel-main').style.display = 'block';
+            if (currentRoom) remove(ref(db, `rooms/${currentRoom}`));
+            return;
+        }
+
+        // If on main lobby and can't go back in web history, exit app
+        if (!canGoBack) {
+            CapacitorApp.exitApp();
+        } else {
+            window.history.back();
+        }
+    });
 
     const canvas = document.getElementById('carromBoard');
     const ctx = canvas.getContext('2d', { alpha: false }); 
@@ -549,6 +724,30 @@ export default function App() {
         }
 
         updateScores();
+
+        let hostCoinsLeft = coins.filter(c => c.type === 'white' && c.active).length;
+        let guestCoinsLeft = coins.filter(c => c.type === 'black' && c.active).length;
+        
+        if (hostCoinsLeft === 0 || guestCoinsLeft === 0) {
+            gameState = 'GAMEOVER';
+            let winner;
+            if (queenStatus.active || queenStatus.needsCover) {
+                winner = hostCoinsLeft === 0 ? "Black Wins (Foul)!" : "White Wins (Foul)!";
+            } else {
+                winner = hostCoinsLeft === 0 ? "White Wins!" : "Black Wins!";
+            }
+            
+            saveHistory(winner, score.host, score.guest);
+            
+            statusText.innerText = `GAME OVER`;
+            statusText.style.color = "var(--accent)";
+            document.getElementById('go-text').innerText = winner;
+            document.getElementById('game-over-overlay').style.display = 'flex';
+            
+            if(gameMode === 'multi' && myRole === 'host') syncBoardToFirebase(onlineTurn);
+            return;
+        }
+
         let keepTurn = (turnEvents.pocketedOwn || turnEvents.pocketedQueen) && !turnEvents.foul;
         
         if (!keepTurn) { onlineTurn = onlineTurn === 'host' ? 'guest' : 'host'; }
@@ -647,6 +846,8 @@ export default function App() {
             striker.isValid = coins.every(c => !c.active || Math.hypot(c.x - striker.x, c.y - striker.y) > striker.radius + c.radius);
         }
 
+        if (gameState === 'GAMEOVER') return;
+
         ctx.clearRect(0, 0, 350, 350);
         drawBoardUI();
         
@@ -664,28 +865,6 @@ export default function App() {
         
         coins.forEach(c => c.draw());
         striker.draw();
-
-        let hostCoinsLeft = coins.filter(c => c.type === 'white' && c.active).length;
-        let guestCoinsLeft = coins.filter(c => c.type === 'black' && c.active).length;
-        
-        if (hostCoinsLeft === 0 || guestCoinsLeft === 0) {
-            gameState = 'GAMEOVER';
-            let winner;
-            if (queenStatus.active || queenStatus.needsCover) {
-                winner = hostCoinsLeft === 0 ? "Black Wins (Foul)!" : "White Wins (Foul)!";
-            } else {
-                winner = hostCoinsLeft === 0 ? "White Wins!" : "Black Wins!";
-            }
-            
-            saveHistory(winner, score.host, score.guest);
-            
-            statusText.innerText = `GAME OVER`;
-            statusText.style.color = "var(--accent)";
-            document.getElementById('go-text').innerText = winner;
-            document.getElementById('game-over-overlay').style.display = 'flex';
-            
-            return requestAnimationFrame(gameLoop);
-        }
 
         if (gameState === 'MOVING' && !anyMoving) endTurnLogic();
 
@@ -959,7 +1138,7 @@ export default function App() {
 
   return (
     <>
-      <div id="network-status" style={{ display: 'none', background: '#ef4444', color: 'white', textAlign: 'center', padding: '8px', position: 'fixed', top: 0, left: 0, width: '100%', zIndex: 1000, fontSize: '12px', fontWeight: 'bold', letterSpacing: '1px' }}>
+      <div id="network-status" style={{ display: 'none', background: '#ef4444', color: 'white', textAlign: 'center', padding: '8px', paddingTop: 'calc(8px + env(safe-area-inset-top))', position: 'fixed', top: 0, left: 0, width: '100%', zIndex: 1000, fontSize: '12px', fontWeight: 'bold', letterSpacing: '1px' }}>
         OFFLINE - MULTIPLAYER DISABLED
       </div>
 
@@ -980,6 +1159,13 @@ export default function App() {
               <input type="text" className="lobby-input" id="input-room" placeholder="Enter Room Code" maxLength={6} />
               <button className="lobby-btn" id="btn-join" style={{background: 'linear-gradient(135deg, #38bdf8, #0ea5e9)', boxShadow: '0 4px 15px rgba(14, 165, 233, 0.3)', color: 'white'}}>Join Room</button>
               <p id="lobby-error" style={{color: 'var(--danger)', fontSize: '13px', marginTop: '15px', fontWeight: 600, minHeight: '20px'}}></p>
+
+              <div style={{marginTop: '20px', paddingTop: '20px', borderTop: '1px solid rgba(255,255,255,0.1)'}}>
+                  <h3 style={{margin: '0 0 10px 0', fontSize: '18px'}}>Online Players</h3>
+                  <ul id="online-users-list" style={{ listStyle: 'none', padding: 0, margin: 0, maxHeight: '150px', overflowY: 'auto', background: 'rgba(0,0,0,0.2)', borderRadius: '8px' }}>
+                      <li style={{padding: '10px', color: 'var(--text-muted)', textAlign: 'center'}}>Loading...</li>
+                  </ul>
+              </div>
 
               <div style={{marginTop: '20px', paddingTop: '20px', borderTop: '1px solid rgba(255,255,255,0.1)'}}>
                   <h3 style={{margin: '0 0 10px 0', fontSize: '18px'}}>Single Player</h3>
@@ -1006,6 +1192,17 @@ export default function App() {
               <h2 style={{ marginTop: 0, color: 'var(--text-main)', textAlign: 'center', fontSize: '24px' }}>Match History</h2>
               <ul id="history-list" style={{ listStyle: 'none', padding: 0, margin: 0, overflowY: 'auto', flex: 1, textAlign: 'left' }}></ul>
               <button className="lobby-btn outline" id="btn-close-history" style={{ marginTop: '20px' }}>Close</button>
+          </div>
+      </div>
+
+      <div id="invite-modal" style={{ display: 'none', position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(9, 9, 11, 0.95)', zIndex: 300, flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}>
+          <div className="lobby-panel" style={{ width: '90%', maxWidth: '350px', display: 'flex', flexDirection: 'column', padding: '30px 20px', textAlign: 'center' }}>
+              <h2 style={{ marginTop: 0, color: 'var(--text-main)', fontSize: '22px' }}>Game Invite</h2>
+              <p id="invite-text" style={{ color: 'var(--text-muted)', fontSize: '16px', margin: '20px 0' }}></p>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                  <button className="lobby-btn primary" onClick={() => window.acceptInvite()} style={{ flex: 1 }}>Accept</button>
+                  <button className="lobby-btn outline" onClick={() => window.declineInvite()} style={{ flex: 1 }}>Decline</button>
+              </div>
           </div>
       </div>
 

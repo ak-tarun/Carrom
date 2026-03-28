@@ -73,6 +73,22 @@ body {
     transform: translateY(-2px);
 }
 
+.score-box.active-turn::after {
+    content: 'TURN';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--accent);
+    color: #000;
+    font-size: 9px;
+    font-weight: 800;
+    padding: 2px 8px;
+    border-radius: 0 0 6px 6px;
+    letter-spacing: 1px;
+    box-shadow: 0 2px 8px rgba(245, 158, 11, 0.5);
+}
+
 .score-box::before {
     content: '';
     position: absolute;
@@ -195,6 +211,85 @@ canvas {
     letter-spacing: -0.5px;
 }
 
+.lobby-section {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 16px;
+    padding: 16px;
+    margin-bottom: 16px;
+    text-align: left;
+}
+
+.section-title {
+    margin: 0 0 12px 0;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.divider {
+    display: flex;
+    align-items: center;
+    margin: 12px 0;
+}
+.divider::before, .divider::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: rgba(255, 255, 255, 0.1);
+}
+.divider span {
+    padding: 0 12px;
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.join-row {
+    display: flex;
+    gap: 8px;
+}
+.join-row .lobby-input {
+    margin: 0;
+    flex: 1;
+}
+.join-row .lobby-btn {
+    margin: 0;
+    width: auto;
+    padding: 0 20px;
+}
+
+.users-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    max-height: 120px;
+    overflow-y: auto;
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.3);
+}
+.users-list li {
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 14px;
+}
+.users-list li:last-child {
+    border-bottom: none;
+}
+
+.error-text {
+    color: var(--danger);
+    font-size: 12px;
+    margin: 8px 0 0 0;
+    font-weight: 600;
+    min-height: 15px;
+}
+
 .lobby-btn {
     background: var(--text-main); 
     color: var(--bg-darker); 
@@ -227,6 +322,13 @@ canvas {
     box-shadow: 0 8px 20px rgba(59, 130, 246, 0.3);
 }
 .lobby-btn.secondary:hover { box-shadow: 0 12px 25px rgba(59, 130, 246, 0.4); }
+
+.lobby-btn.success {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white;
+    box-shadow: 0 8px 20px rgba(16, 185, 129, 0.3);
+}
+.lobby-btn.success:hover { box-shadow: 0 12px 25px rgba(16, 185, 129, 0.4); }
 
 .lobby-btn.outline {
     background: transparent;
@@ -288,6 +390,10 @@ canvas {
 @keyframes slideUp {
     from { opacity: 0; transform: translateY(30px) scale(0.95); }
     to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
 }
 
 @keyframes fadeIn {

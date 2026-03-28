@@ -26,6 +26,54 @@ export default function App() {
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
 
+    // Connection State Handling
+    const connectedRef = ref(db, ".info/connected");
+    let hasInitiallyConnected = false;
+    let reconnectAttempts = 0;
+    let reconnectTimeout = null;
+
+    onValue(connectedRef, (snap) => {
+        const isConnected = snap.val() === true;
+        const loader = document.getElementById('connection-loader');
+        const loaderText = document.getElementById('connection-text');
+        
+        if (isConnected) {
+            hasInitiallyConnected = true;
+            reconnectAttempts = 0;
+            if (reconnectTimeout) {
+                clearTimeout(reconnectTimeout);
+                reconnectTimeout = null;
+            }
+            if (loader) loader.style.display = 'none';
+        } else {
+            if (loader) {
+                loader.style.display = 'flex';
+                if (hasInitiallyConnected) {
+                    handleReconnect(loaderText);
+                } else {
+                    if (loaderText) loaderText.innerText = "Connecting to server...";
+                }
+            }
+        }
+    });
+
+    function handleReconnect(loaderText) {
+        if (reconnectAttempts > 5) {
+            if (loaderText) loaderText.innerText = "Connection failed. Please refresh the page.";
+            return;
+        }
+        
+        const backoffTime = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000); // Max 30s
+        if (loaderText) loaderText.innerText = `Connection lost. Reconnecting in ${backoffTime/1000}s...`;
+        
+        reconnectTimeout = setTimeout(() => {
+            reconnectAttempts++;
+            if (loaderText) loaderText.innerText = "Attempting to reconnect...";
+            // Firebase handles the actual reconnection automatically, 
+            // this is just for UI feedback and limiting attempts.
+        }, backoffTime);
+    }
+
     let myRole = null; 
     let currentRoom = null;
     let onlineTurn = 'host'; 
@@ -121,8 +169,7 @@ export default function App() {
         const listEl = document.getElementById('online-users-list');
         if (!listEl) return;
         
-        const now = Date.now();
-        const activeUsers = Object.values(users).filter(u => u.id !== myUserId && (now - u.lastSeen < 60000)); // Active in last minute
+        const activeUsers = Object.values(users).filter(u => u.id !== myUserId);
 
         if (activeUsers.length === 0) {
             listEl.innerHTML = '<li style="padding: 10px; color: var(--text-muted); text-align: center;">No other players online</li>';
@@ -135,11 +182,6 @@ export default function App() {
             `).join('');
         }
     });
-
-    // Keep alive ping
-    setInterval(() => {
-        update(myPresenceRef, { lastSeen: Date.now() });
-    }, 30000);
 
     // Listen for incoming invites
     onValue(ref(db, `invites/${myUserId}`), (snapshot) => {
@@ -156,7 +198,7 @@ export default function App() {
                 currentRoom = invite.roomId;
                 myRole = 'guest';
                 gameMode = 'multi';
-                await update(ref(db, `rooms/${currentRoom}`), { status: 'playing' });
+                await update(ref(db, `rooms/${currentRoom}`), { status: 'playing', guestId: myUserId });
                 startGame();
             };
             
@@ -178,7 +220,7 @@ export default function App() {
             currentRoom = code;
             myRole = 'host';
             
-            await set(ref(db, `rooms/${code}`), { status: 'waiting', turn: 'host' });
+            await set(ref(db, `rooms/${code}`), { status: 'waiting', turn: 'host', hostId: myUserId });
             
             // Send the invite
             await set(ref(db, `invites/${targetUserId}`), {
@@ -558,8 +600,13 @@ export default function App() {
         score.host = hostCoins + (!queenStatus.active && queenStatus.pocketedBy === 'host' && !queenStatus.needsCover ? 3 : 0);
         score.guest = guestCoins + (!queenStatus.active && queenStatus.pocketedBy === 'guest' && !queenStatus.needsCover ? 3 : 0);
         
-        scoreUserEl.innerText = score.host;
-        scoreSystemEl.innerText = score.guest;
+        if (myRole === 'host') {
+            scoreUserEl.innerText = score.host;
+            scoreSystemEl.innerText = score.guest;
+        } else {
+            scoreUserEl.innerText = score.guest;
+            scoreSystemEl.innerText = score.host;
+        }
     }
 
     function drawBoardUI() {
@@ -696,12 +743,21 @@ export default function App() {
     function syncBoardToFirebase(nextTurn) {
         if(gameMode === 'single' || myRole !== 'host') return; 
         const boardState = coins.map(c => ({x: c.x, y: c.y, vx: c.vx, vy: c.vy, active: c.active}));
-        update(ref(db, `rooms/${currentRoom}/sync`), {
+        
+        let syncData = {
             coins: boardState,
             queenStatus: queenStatus,
             turn: nextTurn,
+            gameState: gameState,
             timestamp: Date.now()
-        });
+        };
+        
+        if (statusText.innerText.includes('Foul')) {
+            syncData.statusText = statusText.innerText;
+            syncData.statusColor = statusText.style.color;
+        }
+        
+        update(ref(db, `rooms/${currentRoom}/sync`), syncData);
     }
 
     function endTurnLogic() {
@@ -752,20 +808,29 @@ export default function App() {
         
         if (!keepTurn) { onlineTurn = onlineTurn === 'host' ? 'guest' : 'host'; }
 
+        let hadFoul = turnEvents.foul;
         turnEvents = { pocketedOwn: false, pocketedQueen: false, foul: false };
         gameState = 'POSITIONING';
-        resetStrikerForTurn();
+        resetStrikerForTurn(hadFoul);
+
+        if (hadFoul) {
+            setTimeout(() => {
+                if (gameState === 'POSITIONING') {
+                    resetStrikerForTurn(false);
+                }
+            }, 2000);
+        }
 
         if(gameMode === 'multi' && myRole === 'host') syncBoardToFirebase(onlineTurn);
     }
 
-    function resetStrikerForTurn() {
+    function resetStrikerForTurn(keepStatusText = false) {
         striker.vx = 0; striker.vy = 0; striker.isValid = true;
         
         const userBox = document.querySelector('.user-box');
         const systemBox = document.querySelector('.system-box');
         
-        if (onlineTurn === 'host') {
+        if (onlineTurn === myRole) {
             userBox?.classList.add('active-turn');
             systemBox?.classList.remove('active-turn');
         } else {
@@ -775,12 +840,16 @@ export default function App() {
 
         if (onlineTurn === myRole) {
             striker.y = 295; striker.x = 175; 
-            statusText.innerText = "Your Turn";
-            statusText.style.color = "var(--success)";
+            if (!keepStatusText) {
+                statusText.innerText = "Your Turn";
+                statusText.style.color = "var(--success)";
+            }
         } else {
             striker.y = 55; striker.x = 175; 
-            statusText.innerText = gameMode === 'single' ? "AI's Turn" : "Opponent's Turn";
-            statusText.style.color = "var(--text-muted)";
+            if (!keepStatusText) {
+                statusText.innerText = gameMode === 'single' ? "AI's Turn" : "Opponent's Turn";
+                statusText.style.color = "var(--text-muted)";
+            }
         }
     }
 
@@ -866,7 +935,11 @@ export default function App() {
         coins.forEach(c => c.draw());
         striker.draw();
 
-        if (gameState === 'MOVING' && !anyMoving) endTurnLogic();
+        if (gameState === 'MOVING' && !anyMoving) {
+            if (!(gameMode === 'multi' && myRole === 'guest')) {
+                endTurnLogic();
+            }
+        }
 
         if (gameMode === 'single' && onlineTurn === 'guest' && gameState === 'POSITIONING' && !aiThinking) {
             playAITurn();
@@ -994,7 +1067,7 @@ export default function App() {
             currentRoom = code;
             myRole = 'host';
             
-            await set(ref(db, `rooms/${code}`), { status: 'waiting', turn: 'host' });
+            await set(ref(db, `rooms/${code}`), { status: 'waiting', turn: 'host', hostId: myUserId });
             
             document.getElementById('panel-main').style.display = 'none';
             document.getElementById('panel-waiting').style.display = 'block';
@@ -1028,7 +1101,7 @@ export default function App() {
             if(snapshot.exists() && snapshot.val().status === 'waiting') {
                 currentRoom = code;
                 myRole = 'guest';
-                await update(roomRef, { status: 'playing' });
+                await update(roomRef, { status: 'playing', guestId: myUserId });
                 startGame();
             } else {
                 errorText.innerText = "Room not found or already full.";
@@ -1050,8 +1123,8 @@ export default function App() {
             document.querySelector('.user-box .score-text').innerText = "You (White)";
             document.querySelector('.system-box .score-text').innerText = gameMode === 'single' ? "AI (Black)" : "Opponent (Black)";
         } else {
-            document.querySelector('.user-box .score-text').innerText = "Opponent (White)";
-            document.querySelector('.system-box .score-text').innerText = "You (Black)";
+            document.querySelector('.user-box .score-text').innerText = "You (Black)";
+            document.querySelector('.system-box .score-text').innerText = "Opponent (White)";
         }
 
         if (myRole === 'guest') {
@@ -1124,12 +1197,85 @@ export default function App() {
                         });
                         queenStatus = data.queenStatus;
                         onlineTurn = data.turn;
-                        gameState = 'POSITIONING';
-                        resetStrikerForTurn();
+                        gameState = data.gameState || 'POSITIONING';
+                        
                         updateScores();
+
+                        if (gameState === 'GAMEOVER') {
+                            let hostCoinsLeft = coins.filter(c => c.type === 'white' && c.active).length;
+                            let guestCoinsLeft = coins.filter(c => c.type === 'black' && c.active).length;
+                            let winner;
+                            if (queenStatus.active || queenStatus.needsCover) {
+                                winner = hostCoinsLeft === 0 ? "Black Wins (Foul)!" : "White Wins (Foul)!";
+                            } else {
+                                winner = hostCoinsLeft === 0 ? "White Wins!" : "Black Wins!";
+                            }
+                            
+                            saveHistory(winner, score.host, score.guest);
+                            
+                            statusText.innerText = `GAME OVER`;
+                            statusText.style.color = "var(--accent)";
+                            document.getElementById('go-text').innerText = winner;
+                            document.getElementById('game-over-overlay').style.display = 'flex';
+                            return;
+                        }
+
+                        if (data.statusText) {
+                            statusText.innerText = data.statusText;
+                            statusText.style.color = data.statusColor || 'var(--text-main)';
+                            resetStrikerForTurn(true);
+                            setTimeout(() => {
+                                if (gameState === 'POSITIONING') {
+                                    resetStrikerForTurn(false);
+                                }
+                            }, 2000);
+                        } else {
+                            resetStrikerForTurn();
+                        }
                     }
                 });
             }
+
+            // Listen for opponent disconnect
+            let opponentDisconnectTimeout = null;
+            onValue(ref(db, `rooms/${currentRoom}`), (snap) => {
+                if (!snap.exists() && isGameRunning) {
+                    alert("Opponent has left the game.");
+                    isGameRunning = false;
+                    document.getElementById('lobby').style.display = 'flex';
+                    document.getElementById('panel-main').style.display = 'block';
+                    document.getElementById('panel-waiting').style.display = 'none';
+                    currentRoom = null;
+                } else if (snap.exists() && isGameRunning) {
+                    const roomData = snap.val();
+                    const oppId = myRole === 'host' ? roomData.guestId : roomData.hostId;
+                    if (oppId) {
+                        onValue(ref(db, `online_users/${oppId}`), (presenceSnap) => {
+                            if (!presenceSnap.exists() && isGameRunning) {
+                                // Give them 15 seconds to reconnect before ending game
+                                if (!opponentDisconnectTimeout) {
+                                    opponentDisconnectTimeout = setTimeout(() => {
+                                        if (isGameRunning) {
+                                            alert("Opponent has disconnected.");
+                                            isGameRunning = false;
+                                            document.getElementById('lobby').style.display = 'flex';
+                                            document.getElementById('panel-main').style.display = 'block';
+                                            document.getElementById('panel-waiting').style.display = 'none';
+                                            remove(ref(db, `rooms/${currentRoom}`));
+                                            currentRoom = null;
+                                        }
+                                    }, 15000);
+                                }
+                            } else {
+                                if (opponentDisconnectTimeout) {
+                                    clearTimeout(opponentDisconnectTimeout);
+                                    opponentDisconnectTimeout = null;
+                                }
+                            }
+                        });
+                    }
+                }
+            });
         }
         
         requestAnimationFrame(gameLoop);
@@ -1138,6 +1284,11 @@ export default function App() {
 
   return (
     <>
+      <div id="connection-loader" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(9, 9, 11, 0.95)', zIndex: 9999, backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)' }}>
+          <div className="spinner" style={{ width: '40px', height: '40px', border: '4px solid rgba(255,255,255,0.1)', borderTopColor: 'var(--accent)', borderRadius: '50%', animation: 'spin 1s linear infinite', marginBottom: '15px' }}></div>
+          <p id="connection-text" style={{ color: 'var(--text-main)', fontSize: '16px', fontWeight: 600, letterSpacing: '0.5px' }}>Connecting to server...</p>
+      </div>
+
       <div id="network-status" style={{ display: 'none', background: '#ef4444', color: 'white', textAlign: 'center', padding: '8px', paddingTop: 'calc(8px + env(safe-area-inset-top))', position: 'fixed', top: 0, left: 0, width: '100%', zIndex: 1000, fontSize: '12px', fontWeight: 'bold', letterSpacing: '1px' }}>
         OFFLINE - MULTIPLAYER DISABLED
       </div>
@@ -1149,34 +1300,39 @@ export default function App() {
 
       <div id="lobby">
           <div className="lobby-panel" id="panel-main">
-              <h2>Multiplayer</h2>
-              <button className="lobby-btn" id="btn-create">Create Room</button>
-              <div style={{display: 'flex', alignItems: 'center', margin: '20px 0'}}>
-                  <div style={{flex: 1, height: '1px', background: 'rgba(255,255,255,0.1)'}}></div>
-                  <span style={{padding: '0 15px', color: 'var(--text-muted)', fontSize: '12px', fontWeight: 600}}>OR</span>
-                  <div style={{flex: 1, height: '1px', background: 'rgba(255,255,255,0.1)'}}></div>
+              <h1 style={{fontSize: '32px', fontWeight: 900, margin: '0 0 20px 0', color: 'var(--accent)', letterSpacing: '2px', textTransform: 'uppercase'}}>Carrom</h1>
+              
+              <div className="lobby-section">
+                  <h3 className="section-title">Play Online</h3>
+                  <button className="lobby-btn primary" id="btn-create">Create Room</button>
+                  <div className="divider"><span>OR</span></div>
+                  <div className="join-row">
+                      <input type="text" className="lobby-input" id="input-room" placeholder="Room Code" maxLength={6} />
+                      <button className="lobby-btn secondary" id="btn-join">Join</button>
+                  </div>
+                  <p id="lobby-error" className="error-text"></p>
               </div>
-              <input type="text" className="lobby-input" id="input-room" placeholder="Enter Room Code" maxLength={6} />
-              <button className="lobby-btn" id="btn-join" style={{background: 'linear-gradient(135deg, #38bdf8, #0ea5e9)', boxShadow: '0 4px 15px rgba(14, 165, 233, 0.3)', color: 'white'}}>Join Room</button>
-              <p id="lobby-error" style={{color: 'var(--danger)', fontSize: '13px', marginTop: '15px', fontWeight: 600, minHeight: '20px'}}></p>
 
-              <div style={{marginTop: '20px', paddingTop: '20px', borderTop: '1px solid rgba(255,255,255,0.1)'}}>
-                  <h3 style={{margin: '0 0 10px 0', fontSize: '18px'}}>Online Players</h3>
-                  <ul id="online-users-list" style={{ listStyle: 'none', padding: 0, margin: 0, maxHeight: '150px', overflowY: 'auto', background: 'rgba(0,0,0,0.2)', borderRadius: '8px' }}>
+              <div className="lobby-section">
+                  <h3 className="section-title">Active Players</h3>
+                  <ul id="online-users-list" className="users-list">
                       <li style={{padding: '10px', color: 'var(--text-muted)', textAlign: 'center'}}>Loading...</li>
                   </ul>
               </div>
 
-              <div style={{marginTop: '20px', paddingTop: '20px', borderTop: '1px solid rgba(255,255,255,0.1)'}}>
-                  <h3 style={{margin: '0 0 10px 0', fontSize: '18px'}}>Single Player</h3>
-                  <select id="difficulty-select" className="lobby-input" style={{padding: '10px', fontSize: '14px', marginBottom: '10px'}}>
-                      <option value="easy">Easy AI</option>
-                      <option value="medium">Medium AI</option>
-                      <option value="hard">Hard AI</option>
-                  </select>
-                  <button className="lobby-btn" id="btn-single" style={{background: 'linear-gradient(135deg, #10b981, #059669)'}}>Play Offline</button>
+              <div className="lobby-section">
+                  <h3 className="section-title">Practice Mode</h3>
+                  <div className="join-row">
+                      <select id="difficulty-select" className="lobby-input" style={{padding: '10px', fontSize: '14px'}}>
+                          <option value="easy">Easy AI</option>
+                          <option value="medium">Medium AI</option>
+                          <option value="hard">Hard AI</option>
+                      </select>
+                      <button className="lobby-btn success" id="btn-single">Play</button>
+                  </div>
               </div>
-              <button className="lobby-btn" id="btn-history" style={{background: 'transparent', border: '1px solid var(--accent)', marginTop: '15px'}}>View History</button>
+              
+              <button className="lobby-btn outline" id="btn-history" style={{marginTop: '10px'}}>View Match History</button>
           </div>
           
           <div className="lobby-panel" id="panel-waiting" style={{display: 'none'}}>

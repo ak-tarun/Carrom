@@ -1047,7 +1047,7 @@ export default function App() {
     document.getElementById('btn-single').addEventListener('click', () => {
         initAudio();
         gameMode = 'single';
-        aiDifficulty = document.getElementById('difficulty-select').value;
+        aiDifficulty = document.querySelector('input[name="difficulty"]:checked').value;
         myRole = 'host';
         currentRoom = 'local';
         startGame();
@@ -1287,6 +1287,7 @@ export default function App() {
       <div id="connection-loader" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(9, 9, 11, 0.95)', zIndex: 9999, backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)' }}>
           <div className="spinner" style={{ width: '40px', height: '40px', border: '4px solid rgba(255,255,255,0.1)', borderTopColor: 'var(--accent)', borderRadius: '50%', animation: 'spin 1s linear infinite', marginBottom: '15px' }}></div>
           <p id="connection-text" style={{ color: 'var(--text-main)', fontSize: '16px', fontWeight: 600, letterSpacing: '0.5px' }}>Connecting to server...</p>
+          <button id="btn-offline-anyway" style={{ marginTop: '20px', background: 'transparent', border: '1px solid var(--text-muted)', color: 'var(--text-muted)', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer' }} onClick={() => { document.getElementById('connection-loader').style.display = 'none'; }}>Play Offline Anyway</button>
       </div>
 
       <div id="network-status" style={{ display: 'none', background: '#ef4444', color: 'white', textAlign: 'center', padding: '8px', paddingTop: 'calc(8px + env(safe-area-inset-top))', position: 'fixed', top: 0, left: 0, width: '100%', zIndex: 1000, fontSize: '12px', fontWeight: 'bold', letterSpacing: '1px' }}>
@@ -1322,14 +1323,16 @@ export default function App() {
 
               <div className="lobby-section">
                   <h3 className="section-title">Practice Mode</h3>
-                  <div className="join-row">
-                      <select id="difficulty-select" className="lobby-input" style={{padding: '10px', fontSize: '14px'}}>
-                          <option value="easy">Easy AI</option>
-                          <option value="medium">Medium AI</option>
-                          <option value="hard">Hard AI</option>
-                      </select>
-                      <button className="lobby-btn success" id="btn-single">Play</button>
+                  <div className="segmented-control">
+                      <input type="radio" id="diff-easy" name="difficulty" value="easy" defaultChecked />
+                      <label htmlFor="diff-easy">Easy</label>
+                      <input type="radio" id="diff-medium" name="difficulty" value="medium" />
+                      <label htmlFor="diff-medium">Medium</label>
+                      <input type="radio" id="diff-hard" name="difficulty" value="hard" />
+                      <label htmlFor="diff-hard">Hard</label>
+                      <div className="pill"></div>
                   </div>
+                  <button className="lobby-btn success" id="btn-single">Play</button>
               </div>
               
               <button className="lobby-btn outline" id="btn-history" style={{marginTop: '10px'}}>View Match History</button>

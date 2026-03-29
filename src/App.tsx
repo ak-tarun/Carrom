@@ -1,7 +1,7 @@
 // @ts-nocheck
 import React, { useEffect } from 'react';
 import { initializeApp } from "firebase/app";
-import { getDatabase, ref, set, onValue, get, update, onDisconnect, push, remove } from "firebase/database";
+import { getDatabase, ref, set, onValue, get, update, onDisconnect, push, remove, onChildAdded } from "firebase/database";
 import { Network } from '@capacitor/network';
 import { App as CapacitorApp } from '@capacitor/app';
 
@@ -786,6 +786,7 @@ export default function App() {
         
         if (hostCoinsLeft === 0 || guestCoinsLeft === 0) {
             gameState = 'GAMEOVER';
+            wipeRoomData();
             let winner;
             if (queenStatus.active || queenStatus.needsCover) {
                 winner = hostCoinsLeft === 0 ? "Black Wins (Foul)!" : "White Wins (Foul)!";
@@ -1053,6 +1054,148 @@ export default function App() {
         startGame();
     });
 
+    // --- COMMS SYSTEM ---
+    let localStream;
+    let peer;
+    let isMicMuted = true;
+
+    function secureRoomSetup(code) {
+        const roomRef = ref(db, `rooms/${code}`);
+        if (myRole === 'host') {
+            onDisconnect(roomRef).remove();
+        }
+    }
+
+    function wipeRoomData() {
+        if (myRole === 'host' && currentRoom && currentRoom !== 'local') {
+            remove(ref(db, `rooms/${currentRoom}/chat`));
+            remove(ref(db, `rooms/${currentRoom}/voiceId`));
+            console.log("Room data wiped for security.");
+        }
+    }
+
+    function initChat() {
+        if (gameMode !== 'multi') return;
+        const commsPanel = document.getElementById('comms-panel');
+        if (commsPanel) commsPanel.style.display = 'flex';
+        const chatRef = ref(db, `rooms/${currentRoom}/chat`);
+        const messagesDiv = document.getElementById('chat-messages');
+        if (messagesDiv) messagesDiv.innerHTML = '';
+
+        const btnSend = document.getElementById('btn-send');
+        if (btnSend) {
+            // Remove old listeners to prevent duplicates
+            const newBtnSend = btnSend.cloneNode(true);
+            btnSend.parentNode.replaceChild(newBtnSend, btnSend);
+            
+            newBtnSend.addEventListener('click', () => {
+                const input = document.getElementById('chat-input');
+                const text = input.value.trim();
+                if (text) {
+                    push(chatRef, { sender: myRole, text: text, timestamp: Date.now() });
+                    input.value = '';
+                }
+            });
+
+            const chatInput = document.getElementById('chat-input');
+            if (chatInput) {
+                const newChatInput = chatInput.cloneNode(true);
+                chatInput.parentNode.replaceChild(newChatInput, chatInput);
+                newChatInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        const text = newChatInput.value.trim();
+                        if (text) {
+                            push(chatRef, { sender: myRole, text: text, timestamp: Date.now() });
+                            newChatInput.value = '';
+                        }
+                    }
+                });
+            }
+        }
+
+        onChildAdded(chatRef, (snapshot) => {
+            const msg = snapshot.val();
+            const msgEl = document.createElement('div');
+            const isMe = msg.sender === myRole;
+            
+            msgEl.style.alignSelf = isMe ? 'flex-end' : 'flex-start';
+            msgEl.style.background = isMe ? 'linear-gradient(135deg, #fbbf24, #f59e0b)' : 'rgba(255,255,255,0.1)';
+            msgEl.style.color = isMe ? '#020617' : 'white';
+            msgEl.style.padding = '8px 12px';
+            msgEl.style.borderRadius = isMe ? '12px 12px 0 12px' : '12px 12px 12px 0';
+            msgEl.innerText = msg.text;
+            
+            const msgsDiv = document.getElementById('chat-messages');
+            if (msgsDiv) {
+                msgsDiv.appendChild(msgEl);
+                msgsDiv.scrollTop = msgsDiv.scrollHeight;
+            }
+        });
+    }
+
+    async function initVoiceChat() {
+        if (gameMode !== 'multi') return;
+        try {
+            localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            localStream.getAudioTracks()[0].enabled = false; 
+            
+            const micBtn = document.getElementById('btn-mic-toggle');
+            if (micBtn) {
+                const newMicBtn = micBtn.cloneNode(true);
+                micBtn.parentNode.replaceChild(newMicBtn, micBtn);
+                
+                newMicBtn.addEventListener('click', () => {
+                    isMicMuted = !isMicMuted;
+                    localStream.getAudioTracks()[0].enabled = !isMicMuted;
+                    newMicBtn.innerText = isMicMuted ? '🎤 Mic Off' : '🎤 Mic On';
+                    newMicBtn.style.background = isMicMuted ? 'rgba(239, 68, 68, 0.9)' : 'rgba(74, 222, 128, 0.9)';
+                    newMicBtn.style.color = isMicMuted ? 'white' : '#020617';
+                });
+            }
+
+            peer = new window.Peer(); 
+
+            peer.on('open', (id) => {
+                if (myRole === 'host') {
+                    set(ref(db, `rooms/${currentRoom}/voiceId`), id);
+                }
+            });
+
+            peer.on('call', (call) => {
+                call.answer(localStream); 
+                call.on('stream', (remoteStream) => {
+                    const remoteAudio = document.getElementById('remote-audio');
+                    if (remoteAudio) remoteAudio.srcObject = remoteStream;
+                });
+            });
+
+            if (myRole === 'guest') {
+                onValue(ref(db, `rooms/${currentRoom}/voiceId`), (snapshot) => {
+                    const hostVoiceId = snapshot.val();
+                    if (hostVoiceId) {
+                        const call = peer.call(hostVoiceId, localStream);
+                        call.on('stream', (remoteStream) => {
+                            const remoteAudio = document.getElementById('remote-audio');
+                            if (remoteAudio) remoteAudio.srcObject = remoteStream;
+                        });
+                    }
+                }, { onlyOnce: true });
+            }
+
+        } catch (err) {
+            console.error("Mic Error:", err);
+            const micBtn = document.getElementById('btn-mic-toggle');
+            if (micBtn) {
+                micBtn.innerText = "🚫 Mic Denied";
+                micBtn.style.background = "rgba(239, 68, 68, 0.9)";
+                micBtn.style.color = "white";
+                micBtn.disabled = true;
+                micBtn.style.cursor = "not-allowed";
+                micBtn.style.opacity = "0.7";
+            }
+        }
+    }
+
     if (window.location.protocol === 'file:') {
         errorText.innerText = "WARNING: Multiplayer requires a local server (like Live Server) to bypass CORS issues.";
     }
@@ -1066,6 +1209,7 @@ export default function App() {
             const code = Math.random().toString(36).substring(2, 8).toUpperCase();
             currentRoom = code;
             myRole = 'host';
+            secureRoomSetup(code);
             
             await set(ref(db, `rooms/${code}`), { status: 'waiting', turn: 'host', hostId: myUserId });
             
@@ -1115,6 +1259,9 @@ export default function App() {
     function startGame() {
         if (isGameRunning) return; 
         isGameRunning = true; 
+        
+        initChat();
+        initVoiceChat();
         
         lobbyEl.style.display = 'none';
         initCoins();
@@ -1385,6 +1532,25 @@ export default function App() {
               <h2 id="go-text" style={{color: 'var(--text-main)', textAlign: 'center', padding: '0 10px', fontSize: '32px', fontWeight: 800, textShadow: '0 4px 15px rgba(0,0,0,0.5)', marginBottom: '5px', letterSpacing: '-0.5px'}}>Game Over</h2>
               <p style={{color: 'var(--text-muted)', fontSize: '14px', marginBottom: '30px', fontWeight: 500}}>Both players will reset to a new game.</p>
               <button className="lobby-btn primary" id="btn-rematch" style={{width: '220px'}}>Play Again</button>
+          </div>
+      </div>
+
+      <audio id="remote-audio" autoPlay></audio>
+
+      <div id="comms-panel" style={{display: 'none', position: 'relative', width: '100%', maxWidth: 'min(94vw, 420px)', zIndex: 50, flexDirection: 'column', gap: '10px', marginTop: '10px', paddingBottom: '20px'}}>
+          <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+              <span style={{color: 'var(--text-muted)', fontSize: '12px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '1px'}}>Voice & Chat</span>
+              <button id="btn-mic-toggle" style={{background: 'rgba(239, 68, 68, 0.9)', border: '1px solid rgba(255,255,255,0.1)', padding: '8px 16px', borderRadius: '20px', color: 'white', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 4px 10px rgba(0,0,0,0.3)'}}>
+                  🎤 Mic Off
+              </button>
+          </div>
+
+          <div style={{background: 'rgba(24, 24, 27, 0.8)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px', padding: '12px', boxShadow: 'inset 0 2px 10px rgba(0,0,0,0.2)'}}>
+              <div id="chat-messages" style={{height: '100px', overflowY: 'auto', color: 'white', fontSize: '13px', marginBottom: '10px', display: 'flex', flexDirection: 'column', gap: '6px', paddingRight: '5px'}}></div>
+              <div style={{display: 'flex', gap: '8px'}}>
+                  <input type="text" id="chat-input" placeholder="Type message..." style={{flex: 1, padding: '10px 14px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.4)', color: 'white', outline: 'none', fontSize: '14px', fontFamily: "'Outfit', sans-serif"}} />
+                  <button id="btn-send" style={{padding: '10px 16px', borderRadius: '10px', border: 'none', background: 'linear-gradient(135deg, var(--accent), #ea580c)', color: 'white', fontWeight: 800, cursor: 'pointer', textTransform: 'uppercase', fontSize: '13px', boxShadow: '0 4px 10px rgba(245, 158, 11, 0.3)'}}>Send</button>
+              </div>
           </div>
       </div>
     </>

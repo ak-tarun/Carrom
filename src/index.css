@@ -24,10 +24,11 @@ body {
     flex-direction: column; 
     align-items: center; 
     font-family: 'Outfit', sans-serif; 
-    height: 100dvh;
+    min-height: 100dvh;
     width: 100vw;
     box-sizing: border-box;
-    overflow: hidden; 
+    overflow-x: hidden;
+    overflow-y: auto;
     user-select: none;
     -webkit-tap-highlight-color: transparent;
     padding-top: env(safe-area-inset-top);
@@ -179,7 +180,9 @@ canvas {
 #lobby {
     position: fixed; 
     top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(9, 9, 11, 0.9); 
+    background: radial-gradient(circle at 50% 0%, rgba(245, 158, 11, 0.15), transparent 50%),
+                radial-gradient(circle at 10% 80%, rgba(59, 130, 246, 0.15), transparent 50%),
+                rgba(9, 9, 11, 0.95);
     z-index: 100;
     display: flex; 
     flex-direction: column; 
@@ -187,49 +190,82 @@ canvas {
     justify-content: center;
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
+    overflow: hidden;
+}
+
+#lobby::before {
+    content: '';
+    position: absolute;
+    top: -50%; left: -50%; width: 200%; height: 200%;
+    background: radial-gradient(circle at center, rgba(255,255,255,0.03) 0%, transparent 60%);
+    animation: rotateBg 40s linear infinite;
+    z-index: -1;
+    pointer-events: none;
+}
+
+@keyframes rotateBg {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
 }
 
 .lobby-panel {
-    background: rgba(24, 24, 27, 0.6); 
-    padding: clamp(20px, 6vw, 35px) clamp(15px, 5vw, 25px); 
-    border-radius: 28px; 
+    background: rgba(20, 20, 23, 0.7); 
+    padding: clamp(24px, 6vw, 40px) clamp(20px, 5vw, 30px); 
+    border-radius: 32px; 
     text-align: center;
-    border: 1px solid rgba(255,255,255,0.08); 
-    border-top: 1px solid rgba(255,255,255,0.2);
-    box-shadow: 0 25px 50px -12px rgba(0,0,0,0.7), 0 0 20px rgba(245, 158, 11, 0.1);
+    border: 1px solid rgba(255,255,255,0.1); 
+    border-top: 1px solid rgba(255,255,255,0.25);
+    border-left: 1px solid rgba(255,255,255,0.15);
+    box-shadow: 0 30px 60px -12px rgba(0,0,0,0.8), 0 0 40px rgba(245, 158, 11, 0.15);
     width: 88%; 
-    max-width: 360px;
+    max-width: 380px;
     max-height: 90vh;
     overflow-y: auto;
-    animation: slideUp 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
+    animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    position: relative;
+}
+
+.lobby-panel::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    border-radius: 32px;
+    padding: 1px;
+    background: linear-gradient(135deg, rgba(255,255,255,0.3), rgba(255,255,255,0) 40%, rgba(245,158,11,0.3));
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
 }
 
 .lobby-panel h2 {
     margin: 0 0 clamp(15px, 5vw, 25px) 0;
-    font-size: clamp(22px, 6vw, 28px);
-    font-weight: 800;
+    font-size: clamp(24px, 6vw, 32px);
+    font-weight: 900;
     color: var(--text-main);
     letter-spacing: -0.5px;
+    text-shadow: 0 2px 10px rgba(255,255,255,0.1);
 }
 
 .lobby-section {
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    border-radius: 16px;
-    padding: 16px;
-    margin-bottom: 16px;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 20px;
+    padding: 20px;
+    margin-bottom: 20px;
     text-align: left;
+    box-shadow: inset 0 2px 10px rgba(0,0,0,0.2);
 }
 
 .section-title {
-    margin: 0 0 12px 0;
-    font-size: 14px;
-    font-weight: 700;
-    color: var(--text-muted);
+    margin: 0 0 16px 0;
+    font-size: 12px;
+    font-weight: 800;
+    color: rgba(255,255,255,0.6);
     text-transform: uppercase;
-    letter-spacing: 1px;
+    letter-spacing: 2px;
 }
 
 .divider {
@@ -294,24 +330,39 @@ canvas {
 }
 
 .lobby-btn {
+    position: relative;
+    overflow: hidden;
     background: var(--text-main); 
     color: var(--bg-darker); 
     border: none; 
-    padding: clamp(12px, 4vw, 16px) clamp(16px, 5vw, 20px);
-    font-size: clamp(13px, 4vw, 15px); 
-    font-weight: 700; 
-    border-radius: 14px; 
+    padding: clamp(14px, 4vw, 18px) clamp(16px, 5vw, 20px);
+    font-size: clamp(14px, 4vw, 16px); 
+    font-weight: 800; 
+    border-radius: 16px; 
     cursor: pointer;
     margin: 8px 0; 
     width: 100%; 
-    transition: all 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
     text-transform: uppercase;
-    letter-spacing: 1px;
+    letter-spacing: 1.5px;
     box-shadow: inset 0 2px 4px rgba(255,255,255,0.3);
 }
 
-.lobby-btn:hover { transform: scale(1.02); filter: brightness(1.1); box-shadow: 0 8px 20px rgba(0,0,0,0.3); }
-.lobby-btn:active { transform: scale(0.96); filter: brightness(0.9); }
+.lobby-btn::after {
+    content: '';
+    position: absolute;
+    top: 0; left: -100%; width: 50%; height: 100%;
+    background: linear-gradient(to right, transparent, rgba(255,255,255,0.4), transparent);
+    transform: skewX(-20deg);
+    transition: left 0.5s ease;
+}
+
+.lobby-btn:hover::after {
+    left: 150%;
+}
+
+.lobby-btn:hover { transform: translateY(-2px) scale(1.02); filter: brightness(1.15); box-shadow: 0 10px 25px rgba(0,0,0,0.4); }
+.lobby-btn:active { transform: translateY(1px) scale(0.98); filter: brightness(0.9); }
 
 .lobby-btn.primary {
     background: linear-gradient(135deg, var(--accent), #ea580c);
@@ -344,10 +395,10 @@ canvas {
 .lobby-input {
     width: 100%; 
     box-sizing: border-box;
-    padding: clamp(12px, 4vw, 16px); 
-    border-radius: 14px; 
+    padding: clamp(14px, 4vw, 18px); 
+    border-radius: 16px; 
     border: 2px solid rgba(255,255,255,0.08);
-    background: rgba(0,0,0,0.4);
+    background: rgba(0,0,0,0.5);
     color: var(--text-main);
     margin: 10px 0 20px 0; 
     text-align: center; 
@@ -355,11 +406,17 @@ canvas {
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 3px;
-    transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
     font-family: 'Outfit', sans-serif;
+    box-shadow: inset 0 2px 6px rgba(0,0,0,0.5);
 }
 
-.lobby-input:focus-within { outline: none; border-color: var(--accent); background: rgba(0,0,0,0.6); box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.3); }
+.lobby-input:focus, .lobby-input:focus-within {
+    outline: none;
+    border-color: rgba(59, 130, 246, 0.6);
+    background: rgba(0,0,0,0.7);
+    box-shadow: inset 0 2px 6px rgba(0,0,0,0.5), 0 0 15px rgba(59, 130, 246, 0.3);
+}
 .lobby-input::placeholder { color: rgba(255,255,255,0.2); font-weight: 500; letter-spacing: 1px; font-size: 16px;}
 
 #room-code-display { 
@@ -429,7 +486,7 @@ canvas {
     top: 4px;
     bottom: 4px;
     left: 4px;
-    width: calc(33.33% - 8px);
+    width: calc((100% - 8px) / 3);
     background: linear-gradient(135deg, var(--accent), #ea580c);
     border-radius: 12px;
     transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);

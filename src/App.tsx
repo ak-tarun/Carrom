@@ -154,14 +154,21 @@ export default function App() {
         myUserId = 'user_' + Math.random().toString(36).substring(2, 9);
         localStorage.setItem('carrom_user_id', myUserId);
     }
+    
+    let myName = localStorage.getItem('carrom_user_name') || `Player ${myUserId.substring(5, 9)}`;
 
     const myPresenceRef = ref(db, `online_users/${myUserId}`);
     onDisconnect(myPresenceRef).remove();
-    set(myPresenceRef, {
-        id: myUserId,
-        status: 'online',
-        lastSeen: Date.now()
-    });
+    
+    function updatePresence(status) {
+        set(myPresenceRef, {
+            id: myUserId,
+            name: myName,
+            status: status,
+            lastSeen: Date.now()
+        });
+    }
+    updatePresence('online');
 
     // Listen for online users
     onValue(ref(db, 'online_users'), (snapshot) => {
@@ -174,12 +181,22 @@ export default function App() {
         if (activeUsers.length === 0) {
             listEl.innerHTML = '<li style="padding: 10px; color: var(--text-muted); text-align: center;">No other players online</li>';
         } else {
-            listEl.innerHTML = activeUsers.map(u => `
-                <li style="padding: 10px; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center;">
-                    <span style="color: var(--text-main); font-size: 14px;">Player ${u.id.substring(5, 9)}</span>
-                    <button class="lobby-btn" style="padding: 4px 12px; font-size: 12px; margin: 0; width: auto;" onclick="window.sendInvite('${u.id}')">Invite</button>
-                </li>
-            `).join('');
+            listEl.innerHTML = activeUsers.map(u => {
+                const isBusy = u.status === 'in-game';
+                const btnStyle = isBusy 
+                    ? 'padding: 4px 12px; font-size: 12px; margin: 0; width: auto; background: rgba(255,255,255,0.1); color: var(--text-muted); cursor: not-allowed;'
+                    : 'padding: 4px 12px; font-size: 12px; margin: 0; width: auto;';
+                const btnText = isBusy ? 'In Game' : 'Invite';
+                const btnAction = isBusy ? '' : `onclick="window.sendInvite('${u.id}')"`;
+                const displayName = u.name || `Player ${u.id.substring(5, 9)}`;
+                
+                return `
+                    <li style="padding: 10px; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center;">
+                        <span style="color: var(--text-main); font-size: 14px; font-weight: 500;">${displayName}</span>
+                        <button class="lobby-btn" style="${btnStyle}" ${btnAction} ${isBusy ? 'disabled' : ''}>${btnText}</button>
+                    </li>
+                `;
+            }).join('');
         }
     });
 
@@ -187,8 +204,18 @@ export default function App() {
     onValue(ref(db, `invites/${myUserId}`), (snapshot) => {
         const invite = snapshot.val();
         if (invite && invite.status === 'pending') {
-            document.getElementById('invite-text').innerText = `Player ${invite.from.substring(5, 9)} invited you to play!`;
-            document.getElementById('invite-modal').style.display = 'flex';
+            if (isGameRunning || currentRoom) {
+                // Auto-decline if currently busy
+                update(ref(db, `invites/${myUserId}`), { status: 'declined_busy' });
+                return;
+            }
+            
+            // Fetch inviter's name
+            get(ref(db, `online_users/${invite.from}`)).then((userSnap) => {
+                const inviterName = userSnap.exists() && userSnap.val().name ? userSnap.val().name : `Player ${invite.from.substring(5, 9)}`;
+                document.getElementById('invite-text').innerText = `${inviterName} invited you to play!`;
+                document.getElementById('invite-modal').style.display = 'flex';
+            });
             
             window.acceptInvite = async () => {
                 await update(ref(db, `invites/${myUserId}`), { status: 'accepted' });
@@ -245,6 +272,14 @@ export default function App() {
                     document.getElementById('panel-waiting').style.display = 'none';
                     document.getElementById('panel-main').style.display = 'block';
                     errorText.innerText = "Invite declined.";
+                    remove(ref(db, `rooms/${code}`));
+                    currentRoom = null;
+                } else if (invite && invite.status === 'declined_busy') {
+                    document.getElementById('panel-waiting').style.display = 'none';
+                    document.getElementById('panel-main').style.display = 'block';
+                    errorText.innerText = "Player is currently in a game.";
+                    remove(ref(db, `rooms/${code}`));
+                    currentRoom = null;
                 }
             });
             
@@ -749,6 +784,8 @@ export default function App() {
             queenStatus: queenStatus,
             turn: nextTurn,
             gameState: gameState,
+            hostScore: hostScore,
+            guestScore: guestScore,
             timestamp: Date.now()
         };
         
@@ -1062,7 +1099,9 @@ export default function App() {
     function secureRoomSetup(code) {
         const roomRef = ref(db, `rooms/${code}`);
         if (myRole === 'host') {
-            onDisconnect(roomRef).remove();
+            // We removed onDisconnect(roomRef).remove() here to prevent auto-leaving
+            // when the user briefly loses connection (e.g., app goes to background).
+            // wipeRoomData() handles cleanup when the game ends.
         }
     }
 
@@ -1070,9 +1109,15 @@ export default function App() {
         if (myRole === 'host' && currentRoom && currentRoom !== 'local') {
             remove(ref(db, `rooms/${currentRoom}/chat`));
             remove(ref(db, `rooms/${currentRoom}/voiceId`));
+            remove(ref(db, `rooms/${currentRoom}`));
             console.log("Room data wiped for security.");
         }
     }
+
+    const handleUnload = () => {
+        wipeRoomData();
+    };
+    window.addEventListener('beforeunload', handleUnload);
 
     function initChat() {
         if (gameMode !== 'multi') return;
@@ -1155,6 +1200,10 @@ export default function App() {
 
             peer = new window.Peer(); 
 
+            peer.on('error', (err) => {
+                console.error("PeerJS Error:", err);
+            });
+
             peer.on('open', (id) => {
                 if (myRole === 'host') {
                     set(ref(db, `rooms/${currentRoom}/voiceId`), id);
@@ -1165,21 +1214,28 @@ export default function App() {
                 call.answer(localStream); 
                 call.on('stream', (remoteStream) => {
                     const remoteAudio = document.getElementById('remote-audio');
-                    if (remoteAudio) remoteAudio.srcObject = remoteStream;
+                    if (remoteAudio) {
+                        remoteAudio.srcObject = remoteStream;
+                        remoteAudio.play().catch(e => console.error("Audio play error:", e));
+                    }
                 });
             });
 
             if (myRole === 'guest') {
-                onValue(ref(db, `rooms/${currentRoom}/voiceId`), (snapshot) => {
+                const unsubscribe = onValue(ref(db, `rooms/${currentRoom}/voiceId`), (snapshot) => {
                     const hostVoiceId = snapshot.val();
                     if (hostVoiceId) {
                         const call = peer.call(hostVoiceId, localStream);
                         call.on('stream', (remoteStream) => {
                             const remoteAudio = document.getElementById('remote-audio');
-                            if (remoteAudio) remoteAudio.srcObject = remoteStream;
+                            if (remoteAudio) {
+                                remoteAudio.srcObject = remoteStream;
+                                remoteAudio.play().catch(e => console.error("Audio play error:", e));
+                            }
                         });
+                        unsubscribe();
                     }
-                }, { onlyOnce: true });
+                });
             }
 
         } catch (err) {
@@ -1200,10 +1256,37 @@ export default function App() {
         errorText.innerText = "WARNING: Multiplayer requires a local server (like Live Server) to bypass CORS issues.";
     }
     
+    // Username handling
+    const inputUsername = document.getElementById('input-username');
+    if (inputUsername) {
+        inputUsername.value = myName;
+    }
+    
+    document.getElementById('btn-save-name').addEventListener('click', () => {
+        const newName = document.getElementById('input-username').value.trim();
+        if (newName) {
+            myName = newName;
+            localStorage.setItem('carrom_user_name', myName);
+            updatePresence('online');
+            const btn = document.getElementById('btn-save-name');
+            btn.innerText = "Saved!";
+            btn.style.background = "var(--success)";
+            setTimeout(() => {
+                btn.innerText = "Save";
+                btn.style.background = "rgba(255, 255, 255, 0.1)";
+            }, 2000);
+        }
+    });
+
     document.getElementById('btn-create').addEventListener('click', async () => {
         initAudio();
         gameMode = 'multi';
-        errorText.innerText = "Creating room...";
+        
+        const btnCreate = document.getElementById('btn-create');
+        const originalText = btnCreate.innerText;
+        btnCreate.innerText = "Creating...";
+        btnCreate.disabled = true;
+        errorText.innerText = "";
         
         try {
             const code = Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -1224,6 +1307,9 @@ export default function App() {
         } catch (err) {
             errorText.innerText = "Firebase Error. Please check your console.";
             console.error(err);
+        } finally {
+            btnCreate.innerText = originalText;
+            btnCreate.disabled = false;
         }
     });
 
@@ -1236,7 +1322,11 @@ export default function App() {
             return;
         }
         
-        errorText.innerText = "Joining...";
+        const btnJoin = document.getElementById('btn-join');
+        const originalText = btnJoin.innerText;
+        btnJoin.innerText = "Joining...";
+        btnJoin.disabled = true;
+        errorText.innerText = "";
         
         try {
             const roomRef = ref(db, `rooms/${code}`);
@@ -1253,12 +1343,16 @@ export default function App() {
         } catch (err) {
             errorText.innerText = "Connection Error. Please check database permissions.";
             console.error(err);
+        } finally {
+            btnJoin.innerText = originalText;
+            btnJoin.disabled = false;
         }
     });
 
     function startGame() {
         if (isGameRunning) return; 
         isGameRunning = true; 
+        updatePresence('in-game');
         
         initChat();
         initVoiceChat();
@@ -1267,11 +1361,31 @@ export default function App() {
         initCoins();
         
         if (myRole === 'host') {
-            document.querySelector('.user-box .score-text').innerText = "You (White)";
-            document.querySelector('.system-box .score-text').innerText = gameMode === 'single' ? "AI (Black)" : "Opponent (Black)";
+            document.querySelector('.user-box .score-text').innerText = `${myName} (White)`;
+            if (gameMode === 'multi' && currentRoom) {
+                get(ref(db, `rooms/${currentRoom}`)).then(snap => {
+                    if (snap.exists() && snap.val().guestId) {
+                        get(ref(db, `online_users/${snap.val().guestId}`)).then(guestSnap => {
+                            const guestName = guestSnap.exists() && guestSnap.val().name ? guestSnap.val().name : "Opponent";
+                            document.querySelector('.system-box .score-text').innerText = `${guestName} (Black)`;
+                        });
+                    }
+                });
+            } else {
+                document.querySelector('.system-box .score-text').innerText = "AI (Black)";
+            }
         } else {
-            document.querySelector('.user-box .score-text').innerText = "You (Black)";
-            document.querySelector('.system-box .score-text').innerText = "Opponent (White)";
+            document.querySelector('.user-box .score-text').innerText = `${myName} (Black)`;
+            if (currentRoom) {
+                get(ref(db, `rooms/${currentRoom}`)).then(snap => {
+                    if (snap.exists() && snap.val().hostId) {
+                        get(ref(db, `online_users/${snap.val().hostId}`)).then(hostSnap => {
+                            const hostName = hostSnap.exists() && hostSnap.val().name ? hostSnap.val().name : "Opponent";
+                            document.querySelector('.system-box .score-text').innerText = `${hostName} (White)`;
+                        });
+                    }
+                });
+            }
         }
 
         if (myRole === 'guest') {
@@ -1346,6 +1460,14 @@ export default function App() {
                         onlineTurn = data.turn;
                         gameState = data.gameState || 'POSITIONING';
                         
+                        if (data.statusText) {
+                            const st = document.getElementById('status');
+                            if (st) {
+                                st.innerText = data.statusText;
+                                st.style.color = data.statusColor || 'var(--accent)';
+                            }
+                        }
+                        
                         updateScores();
 
                         if (gameState === 'GAMEOVER') {
@@ -1389,6 +1511,7 @@ export default function App() {
                 if (!snap.exists() && isGameRunning) {
                     alert("Opponent has left the game.");
                     isGameRunning = false;
+                    updatePresence('online');
                     document.getElementById('lobby').style.display = 'flex';
                     document.getElementById('panel-main').style.display = 'block';
                     document.getElementById('panel-waiting').style.display = 'none';
@@ -1405,6 +1528,7 @@ export default function App() {
                                         if (isGameRunning) {
                                             alert("Opponent has disconnected.");
                                             isGameRunning = false;
+                                            updatePresence('online');
                                             document.getElementById('lobby').style.display = 'flex';
                                             document.getElementById('panel-main').style.display = 'block';
                                             document.getElementById('panel-waiting').style.display = 'none';
@@ -1451,6 +1575,14 @@ export default function App() {
               <h1 style={{fontSize: '32px', fontWeight: 900, margin: '0 0 20px 0', color: 'var(--accent)', letterSpacing: '2px', textTransform: 'uppercase'}}>Carrom</h1>
               
               <div className="lobby-section">
+                  <h3 className="section-title">Your Profile</h3>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <input type="text" className="lobby-input" id="input-username" placeholder="Enter your name" maxLength={15} style={{ flex: 1 }} />
+                      <button className="lobby-btn secondary" id="btn-save-name" style={{ width: 'auto', padding: '0 16px' }}>Save</button>
+                  </div>
+              </div>
+
+              <div className="lobby-section">
                   <h3 className="section-title">Play Online</h3>
                   <button className="lobby-btn primary" id="btn-create">Create Room</button>
                   <div className="divider"><span>OR</span></div>
@@ -1464,7 +1596,14 @@ export default function App() {
               <div className="lobby-section">
                   <h3 className="section-title">Active Players</h3>
                   <ul id="online-users-list" className="users-list">
-                      <li style={{padding: '10px', color: 'var(--text-muted)', textAlign: 'center'}}>Loading...</li>
+                      <li style={{padding: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                          <div className="skeleton-text" style={{width: '80px', height: '14px'}}></div>
+                          <div className="skeleton-btn" style={{width: '50px', height: '24px'}}></div>
+                      </li>
+                      <li style={{padding: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                          <div className="skeleton-text" style={{width: '60px', height: '14px'}}></div>
+                          <div className="skeleton-btn" style={{width: '50px', height: '24px'}}></div>
+                      </li>
                   </ul>
               </div>
 
@@ -1535,7 +1674,7 @@ export default function App() {
           </div>
       </div>
 
-      <audio id="remote-audio" autoPlay></audio>
+      <audio id="remote-audio" autoPlay playsInline></audio>
 
       <div id="comms-panel" style={{display: 'none', position: 'relative', width: '100%', maxWidth: 'min(94vw, 420px)', zIndex: 50, flexDirection: 'column', gap: '10px', marginTop: '10px', paddingBottom: '20px'}}>
           <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>

@@ -32,6 +32,14 @@ export default function App() {
     let reconnectAttempts = 0;
     let reconnectTimeout = null;
 
+    // Online Presence & Invites
+    let myUserId = localStorage.getItem('carrom_user_id');
+    if (!myUserId) {
+        myUserId = 'user_' + Math.random().toString(36).substring(2, 9);
+        localStorage.setItem('carrom_user_id', myUserId);
+    }
+    let myName = localStorage.getItem('carrom_user_name') || `Player ${myUserId.substring(5, 9)}`;
+
     onValue(connectedRef, (snap) => {
         const isConnected = snap.val() === true;
         const loader = document.getElementById('connection-loader');
@@ -45,6 +53,11 @@ export default function App() {
                 reconnectTimeout = null;
             }
             if (loader) loader.style.display = 'none';
+            
+            // Re-establish presence when reconnecting
+            if (myUserId) {
+                updatePresence(isGameRunning ? 'in-game' : 'online');
+            }
         } else {
             if (loader) {
                 loader.style.display = 'flex';
@@ -78,6 +91,14 @@ export default function App() {
     let currentRoom = null;
     let onlineTurn = 'host'; 
     let isGameRunning = false; 
+    let gameUnsubscribes = [];
+    
+    function cleanupGameListeners() {
+        gameUnsubscribes.forEach(unsub => {
+            if (typeof unsub === 'function') unsub();
+        });
+        gameUnsubscribes = [];
+    }
     
     let gameMode = 'multi'; // 'multi' or 'single'
     let aiDifficulty = 'medium'; // 'easy', 'medium', 'hard'
@@ -149,14 +170,6 @@ export default function App() {
     }
 
     // Online Presence & Invites
-    let myUserId = localStorage.getItem('carrom_user_id');
-    if (!myUserId) {
-        myUserId = 'user_' + Math.random().toString(36).substring(2, 9);
-        localStorage.setItem('carrom_user_id', myUserId);
-    }
-    
-    let myName = localStorage.getItem('carrom_user_name') || `Player ${myUserId.substring(5, 9)}`;
-
     const myPresenceRef = ref(db, `online_users/${myUserId}`);
     onDisconnect(myPresenceRef).remove();
     
@@ -210,14 +223,13 @@ export default function App() {
                 return;
             }
             
-            // Fetch inviter's name
-            get(ref(db, `online_users/${invite.from}`)).then((userSnap) => {
-                const inviterName = userSnap.exists() && userSnap.val().name ? userSnap.val().name : `Player ${invite.from.substring(5, 9)}`;
-                document.getElementById('invite-text').innerText = `${inviterName} invited you to play!`;
-                document.getElementById('invite-modal').style.display = 'flex';
-            });
+            // Use inviter's name from invite or fetch it
+            const inviterName = invite.fromName || `Player ${invite.from.substring(5, 9)}`;
+            document.getElementById('invite-text').innerText = `${inviterName} invited you to play!`;
+            document.getElementById('invite-modal').style.display = 'flex';
             
             window.acceptInvite = async () => {
+                await requestMicAccess();
                 await update(ref(db, `invites/${myUserId}`), { status: 'accepted' });
                 document.getElementById('invite-modal').style.display = 'none';
                 
@@ -238,6 +250,7 @@ export default function App() {
 
     window.sendInvite = async (targetUserId) => {
         initAudio();
+        await requestMicAccess();
         gameMode = 'multi';
         const errorText = document.getElementById('lobby-error');
         errorText.innerText = "Sending invite...";
@@ -252,6 +265,7 @@ export default function App() {
             // Send the invite
             await set(ref(db, `invites/${targetUserId}`), {
                 from: myUserId,
+                fromName: myName,
                 roomId: code,
                 status: 'pending',
                 timestamp: Date.now()
@@ -410,9 +424,15 @@ export default function App() {
             // If game over, go back to lobby
             gameOverOverlay.style.display = 'none';
             isGameRunning = false;
+            cleanupGameListeners();
+            updatePresence('online');
             lobbyPanel.style.display = 'flex';
             document.getElementById('panel-main').style.display = 'block';
             document.getElementById('panel-waiting').style.display = 'none';
+            if (gameMode === 'multi' && currentRoom && myRole === 'host') {
+                wipeRoomData();
+            }
+            currentRoom = null;
             return;
         }
 
@@ -420,13 +440,15 @@ export default function App() {
             // Confirm exit game
             if (confirm("Are you sure you want to leave the game?")) {
                 isGameRunning = false;
+                cleanupGameListeners();
+                updatePresence('online');
                 lobbyPanel.style.display = 'flex';
                 document.getElementById('panel-main').style.display = 'block';
                 document.getElementById('panel-waiting').style.display = 'none';
-                if (gameMode === 'multi' && currentRoom) {
-                    // Optional: cleanup room or notify opponent
+                if (gameMode === 'multi' && currentRoom && myRole === 'host') {
                     remove(ref(db, `rooms/${currentRoom}`));
                 }
+                currentRoom = null;
             }
             return;
         }
@@ -784,8 +806,8 @@ export default function App() {
             queenStatus: queenStatus,
             turn: nextTurn,
             gameState: gameState,
-            hostScore: hostScore,
-            guestScore: guestScore,
+            hostScore: score.host,
+            guestScore: score.guest,
             timestamp: Date.now()
         };
         
@@ -823,7 +845,6 @@ export default function App() {
         
         if (hostCoinsLeft === 0 || guestCoinsLeft === 0) {
             gameState = 'GAMEOVER';
-            wipeRoomData();
             let winner;
             if (queenStatus.active || queenStatus.needsCover) {
                 winner = hostCoinsLeft === 0 ? "Black Wins (Foul)!" : "White Wins (Foul)!";
@@ -1119,6 +1140,22 @@ export default function App() {
     };
     window.addEventListener('beforeunload', handleUnload);
 
+    async function requestMicAccess() {
+        if (localStream) return;
+        try {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                console.warn("getUserMedia is not supported in this browser.");
+                return;
+            }
+            localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            if (localStream.getAudioTracks().length > 0) {
+                localStream.getAudioTracks()[0].enabled = false; // Muted by default
+            }
+        } catch (err) {
+            console.warn("Mic Access Denied or Error:", err.message || err);
+        }
+    }
+
     function initChat() {
         if (gameMode !== 'multi') return;
         const commsPanel = document.getElementById('comms-panel');
@@ -1158,7 +1195,7 @@ export default function App() {
             }
         }
 
-        onChildAdded(chatRef, (snapshot) => {
+        const unsubChat = onChildAdded(chatRef, (snapshot) => {
             const msg = snapshot.val();
             const msgEl = document.createElement('div');
             const isMe = msg.sender === myRole;
@@ -1176,28 +1213,94 @@ export default function App() {
                 msgsDiv.scrollTop = msgsDiv.scrollHeight;
             }
         });
+        gameUnsubscribes.push(unsubChat);
+    }
+
+    function monitorAudioLevel(stream, elementId) {
+        if (!stream || stream.getAudioTracks().length === 0) return;
+        
+        const el = document.getElementById(elementId);
+        if (!el) return;
+        
+        el.style.display = 'inline-block';
+        
+        try {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const analyser = audioContext.createAnalyser();
+            const microphone = audioContext.createMediaStreamSource(stream);
+            microphone.connect(analyser);
+            analyser.fftSize = 256;
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            
+            function update() {
+                if (!isGameRunning) {
+                    el.style.display = 'none';
+                    return;
+                }
+                analyser.getByteFrequencyData(dataArray);
+                let sum = 0;
+                for(let i = 0; i < bufferLength; i++) {
+                    sum += dataArray[i];
+                }
+                let average = sum / bufferLength;
+                
+                // If average > 10, user is speaking
+                if (average > 10) {
+                    const scale = 1 + (average / 256) * 0.5;
+                    el.style.transform = `scale(${scale})`;
+                    el.style.opacity = '1';
+                } else {
+                    el.style.transform = `scale(1)`;
+                    el.style.opacity = '0.5';
+                }
+                
+                requestAnimationFrame(update);
+            }
+            update();
+        } catch (e) {
+            console.warn("Audio monitoring failed:", e);
+        }
     }
 
     async function initVoiceChat() {
         if (gameMode !== 'multi') return;
-        try {
-            localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-            localStream.getAudioTracks()[0].enabled = false; 
-            
-            const micBtn = document.getElementById('btn-mic-toggle');
+        
+        const micBtn = document.getElementById('btn-mic-toggle');
+        
+        if (!localStream) {
+            console.warn("Mic Access was denied or failed earlier.");
+            if (micBtn) {
+                micBtn.innerText = "🚫 Mic Denied";
+                micBtn.style.background = "rgba(239, 68, 68, 0.9)";
+                micBtn.style.color = "white";
+                micBtn.disabled = true;
+                micBtn.style.cursor = "not-allowed";
+                micBtn.style.opacity = "0.7";
+            }
+        } else {
+            monitorAudioLevel(localStream, 'local-mic-indicator');
             if (micBtn) {
                 const newMicBtn = micBtn.cloneNode(true);
                 micBtn.parentNode.replaceChild(newMicBtn, micBtn);
                 
                 newMicBtn.addEventListener('click', () => {
+                    if (!localStream || localStream.getAudioTracks().length === 0) return;
                     isMicMuted = !isMicMuted;
                     localStream.getAudioTracks()[0].enabled = !isMicMuted;
                     newMicBtn.innerText = isMicMuted ? '🎤 Mic Off' : '🎤 Mic On';
                     newMicBtn.style.background = isMicMuted ? 'rgba(239, 68, 68, 0.9)' : 'rgba(74, 222, 128, 0.9)';
                     newMicBtn.style.color = isMicMuted ? 'white' : '#020617';
+                    
+                    const localMicInd = document.getElementById('local-mic-indicator');
+                    if (localMicInd) {
+                        localMicInd.style.display = isMicMuted ? 'none' : 'inline-block';
+                    }
                 });
             }
+        }
 
+        try {
             peer = new window.Peer(); 
 
             peer.on('error', (err) => {
@@ -1211,12 +1314,19 @@ export default function App() {
             });
 
             peer.on('call', (call) => {
-                call.answer(localStream); 
+                if (localStream) {
+                    call.answer(localStream); 
+                } else {
+                    const ctx = new AudioContext();
+                    const dest = ctx.createMediaStreamDestination();
+                    call.answer(dest.stream);
+                }
                 call.on('stream', (remoteStream) => {
                     const remoteAudio = document.getElementById('remote-audio');
                     if (remoteAudio) {
                         remoteAudio.srcObject = remoteStream;
                         remoteAudio.play().catch(e => console.error("Audio play error:", e));
+                        monitorAudioLevel(remoteStream, 'remote-mic-indicator');
                     }
                 });
             });
@@ -1225,12 +1335,19 @@ export default function App() {
                 const unsubscribe = onValue(ref(db, `rooms/${currentRoom}/voiceId`), (snapshot) => {
                     const hostVoiceId = snapshot.val();
                     if (hostVoiceId) {
-                        const call = peer.call(hostVoiceId, localStream);
+                        let streamToUse = localStream;
+                        if (!streamToUse) {
+                            const ctx = new AudioContext();
+                            const dest = ctx.createMediaStreamDestination();
+                            streamToUse = dest.stream;
+                        }
+                        const call = peer.call(hostVoiceId, streamToUse);
                         call.on('stream', (remoteStream) => {
                             const remoteAudio = document.getElementById('remote-audio');
                             if (remoteAudio) {
                                 remoteAudio.srcObject = remoteStream;
                                 remoteAudio.play().catch(e => console.error("Audio play error:", e));
+                                monitorAudioLevel(remoteStream, 'remote-mic-indicator');
                             }
                         });
                         unsubscribe();
@@ -1239,16 +1356,7 @@ export default function App() {
             }
 
         } catch (err) {
-            console.error("Mic Error:", err);
-            const micBtn = document.getElementById('btn-mic-toggle');
-            if (micBtn) {
-                micBtn.innerText = "🚫 Mic Denied";
-                micBtn.style.background = "rgba(239, 68, 68, 0.9)";
-                micBtn.style.color = "white";
-                micBtn.disabled = true;
-                micBtn.style.cursor = "not-allowed";
-                micBtn.style.opacity = "0.7";
-            }
+            console.error("PeerJS Initialization Error:", err);
         }
     }
 
@@ -1262,17 +1370,25 @@ export default function App() {
         inputUsername.value = myName;
     }
     
+    document.getElementById('btn-settings').addEventListener('click', () => {
+        document.getElementById('settings-modal').style.display = 'flex';
+    });
+
+    document.getElementById('btn-close-settings').addEventListener('click', () => {
+        document.getElementById('settings-modal').style.display = 'none';
+    });
+    
     document.getElementById('btn-save-name').addEventListener('click', () => {
         const newName = document.getElementById('input-username').value.trim();
         if (newName) {
             myName = newName;
             localStorage.setItem('carrom_user_name', myName);
-            updatePresence('online');
+            updatePresence(isGameRunning ? 'in-game' : 'online');
             const btn = document.getElementById('btn-save-name');
             btn.innerText = "Saved!";
             btn.style.background = "var(--success)";
             setTimeout(() => {
-                btn.innerText = "Save";
+                btn.innerText = "Save Name";
                 btn.style.background = "rgba(255, 255, 255, 0.1)";
             }, 2000);
         }
@@ -1280,6 +1396,7 @@ export default function App() {
 
     document.getElementById('btn-create').addEventListener('click', async () => {
         initAudio();
+        await requestMicAccess();
         gameMode = 'multi';
         
         const btnCreate = document.getElementById('btn-create');
@@ -1315,6 +1432,7 @@ export default function App() {
 
     document.getElementById('btn-join').addEventListener('click', async () => {
         initAudio();
+        await requestMicAccess();
         gameMode = 'multi';
         const code = document.getElementById('input-room').value.toUpperCase();
         if(!code) {
@@ -1351,6 +1469,7 @@ export default function App() {
 
     function startGame() {
         if (isGameRunning) return; 
+        cleanupGameListeners();
         isGameRunning = true; 
         updatePresence('in-game');
         
@@ -1396,14 +1515,14 @@ export default function App() {
         resetStrikerForTurn();
         
         if (gameMode === 'multi') {
-            onValue(ref(db, `rooms/${currentRoom}/preShot`), (snap) => {
+            gameUnsubscribes.push(onValue(ref(db, `rooms/${currentRoom}/preShot`), (snap) => {
                 if(snap.exists() && onlineTurn !== myRole && gameState === 'POSITIONING') {
                     striker.x = 350 - snap.val().x; 
                     striker.y = 350 - snap.val().y;
                 }
-            });
+            }));
 
-            onValue(ref(db, `rooms/${currentRoom}/aim`), (snap) => {
+            gameUnsubscribes.push(onValue(ref(db, `rooms/${currentRoom}/aim`), (snap) => {
                 const data = snap.val();
                 if(data && onlineTurn !== myRole) {
                     opponentAiming = data.isAiming;
@@ -1414,9 +1533,9 @@ export default function App() {
                         oppCurrentDrag.y = 350 - data.currentDrag.y;
                     }
                 }
-            });
+            }));
 
-            onValue(ref(db, `rooms/${currentRoom}/reset`), (snap) => {
+            gameUnsubscribes.push(onValue(ref(db, `rooms/${currentRoom}/reset`), (snap) => {
                 if(snap.exists()) {
                     document.getElementById('game-over-overlay').style.display = 'none';
                     initCoins();
@@ -1432,9 +1551,9 @@ export default function App() {
                     resetStrikerForTurn();
                     updateScores();
                 }
-            });
+            }));
 
-            onValue(ref(db, `rooms/${currentRoom}/shot`), (snap) => {
+            gameUnsubscribes.push(onValue(ref(db, `rooms/${currentRoom}/shot`), (snap) => {
                 const data = snap.val();
                 if(data && onlineTurn !== myRole) {
                     striker.x = 350 - data.x; 
@@ -1443,10 +1562,10 @@ export default function App() {
                     striker.vy = -data.vy;
                     gameState = 'MOVING';
                 }
-            });
+            }));
 
             if(myRole === 'guest') {
-                onValue(ref(db, `rooms/${currentRoom}/sync`), (snap) => {
+                gameUnsubscribes.push(onValue(ref(db, `rooms/${currentRoom}/sync`), (snap) => {
                     const data = snap.val();
                     if(data && data.coins && data.coins.length === coins.length) {
                         data.coins.forEach((cData, i) => {
@@ -1502,40 +1621,72 @@ export default function App() {
                             resetStrikerForTurn();
                         }
                     }
-                });
+                }));
             }
 
             // Listen for opponent disconnect
             let opponentDisconnectTimeout = null;
-            onValue(ref(db, `rooms/${currentRoom}`), (snap) => {
+            let oppPresenceUnsubscribe = null;
+            
+            gameUnsubscribes.push(onValue(ref(db, `rooms/${currentRoom}`), (snap) => {
                 if (!snap.exists() && isGameRunning) {
                     alert("Opponent has left the game.");
                     isGameRunning = false;
+                    cleanupGameListeners();
                     updatePresence('online');
                     document.getElementById('lobby').style.display = 'flex';
                     document.getElementById('panel-main').style.display = 'block';
                     document.getElementById('panel-waiting').style.display = 'none';
                     currentRoom = null;
+                    if (oppPresenceUnsubscribe) {
+                        oppPresenceUnsubscribe();
+                        oppPresenceUnsubscribe = null;
+                    }
                 } else if (snap.exists() && isGameRunning) {
                     const roomData = snap.val();
                     const oppId = myRole === 'host' ? roomData.guestId : roomData.hostId;
-                    if (oppId) {
-                        onValue(ref(db, `online_users/${oppId}`), (presenceSnap) => {
+                    
+                    if (oppId && !oppPresenceUnsubscribe) {
+                        oppPresenceUnsubscribe = onValue(ref(db, `online_users/${oppId}`), (presenceSnap) => {
                             if (!presenceSnap.exists() && isGameRunning) {
-                                // Give them 15 seconds to reconnect before ending game
+                                // Give them 30 seconds to reconnect before ending game
                                 if (!opponentDisconnectTimeout) {
                                     opponentDisconnectTimeout = setTimeout(() => {
                                         if (isGameRunning) {
                                             alert("Opponent has disconnected.");
                                             isGameRunning = false;
+                                            cleanupGameListeners();
                                             updatePresence('online');
                                             document.getElementById('lobby').style.display = 'flex';
                                             document.getElementById('panel-main').style.display = 'block';
                                             document.getElementById('panel-waiting').style.display = 'none';
-                                            remove(ref(db, `rooms/${currentRoom}`));
+                                            if (myRole === 'host') remove(ref(db, `rooms/${currentRoom}`));
                                             currentRoom = null;
+                                            if (oppPresenceUnsubscribe) {
+                                                oppPresenceUnsubscribe();
+                                                oppPresenceUnsubscribe = null;
+                                            }
                                         }
-                                    }, 15000);
+                                    }, 30000);
+                                }
+                            } else if (presenceSnap.exists() && presenceSnap.val().status !== 'in-game' && isGameRunning) {
+                                // Opponent intentionally left the game
+                                alert("Opponent has left the game.");
+                                isGameRunning = false;
+                                cleanupGameListeners();
+                                updatePresence('online');
+                                document.getElementById('lobby').style.display = 'flex';
+                                document.getElementById('panel-main').style.display = 'block';
+                                document.getElementById('panel-waiting').style.display = 'none';
+                                if (myRole === 'host') remove(ref(db, `rooms/${currentRoom}`));
+                                currentRoom = null;
+                                if (oppPresenceUnsubscribe) {
+                                    oppPresenceUnsubscribe();
+                                    oppPresenceUnsubscribe = null;
+                                }
+                                if (opponentDisconnectTimeout) {
+                                    clearTimeout(opponentDisconnectTimeout);
+                                    opponentDisconnectTimeout = null;
                                 }
                             } else {
                                 if (opponentDisconnectTimeout) {
@@ -1546,7 +1697,7 @@ export default function App() {
                         });
                     }
                 }
-            });
+            }));
         }
         
         requestAnimationFrame(gameLoop);
@@ -1571,17 +1722,10 @@ export default function App() {
       </div>
 
       <div id="lobby">
-          <div className="lobby-panel" id="panel-main">
+          <div className="lobby-panel" id="panel-main" style={{ position: 'relative' }}>
+              <button id="btn-settings" style={{ position: 'absolute', top: '20px', right: '20px', background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '20px' }}>⚙️</button>
               <h1 style={{fontSize: '32px', fontWeight: 900, margin: '0 0 20px 0', color: 'var(--accent)', letterSpacing: '2px', textTransform: 'uppercase'}}>Carrom</h1>
               
-              <div className="lobby-section">
-                  <h3 className="section-title">Your Profile</h3>
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                      <input type="text" className="lobby-input" id="input-username" placeholder="Enter your name" maxLength={15} style={{ flex: 1 }} />
-                      <button className="lobby-btn secondary" id="btn-save-name" style={{ width: 'auto', padding: '0 16px' }}>Save</button>
-                  </div>
-              </div>
-
               <div className="lobby-section">
                   <h3 className="section-title">Play Online</h3>
                   <button className="lobby-btn primary" id="btn-create">Create Room</button>
@@ -1640,6 +1784,23 @@ export default function App() {
           </div>
       </div>
 
+      <div id="settings-modal" style={{ display: 'none', position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(9, 9, 11, 0.95)', zIndex: 400, flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}>
+          <div className="lobby-panel" style={{ width: '90%', maxWidth: '350px', display: 'flex', flexDirection: 'column', padding: '30px 20px' }}>
+              <h2 style={{ marginTop: 0, color: 'var(--text-main)', textAlign: 'center', fontSize: '24px' }}>Settings</h2>
+              
+              <div className="lobby-section" style={{ marginTop: '20px' }}>
+                  <h3 className="section-title">Your Profile</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Display Name</label>
+                      <input type="text" className="lobby-input" id="input-username" placeholder="Enter your name" maxLength={15} />
+                      <button className="lobby-btn secondary" id="btn-save-name">Save Name</button>
+                  </div>
+              </div>
+
+              <button className="lobby-btn outline" id="btn-close-settings" style={{ marginTop: '20px' }}>Close</button>
+          </div>
+      </div>
+
       <div id="invite-modal" style={{ display: 'none', position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(9, 9, 11, 0.95)', zIndex: 300, flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}>
           <div className="lobby-panel" style={{ width: '90%', maxWidth: '350px', display: 'flex', flexDirection: 'column', padding: '30px 20px', textAlign: 'center' }}>
               <h2 style={{ marginTop: 0, color: 'var(--text-main)', fontSize: '22px' }}>Game Invite</h2>
@@ -1653,11 +1814,17 @@ export default function App() {
 
       <div className="header">
           <div className="score-box user-box">
-              <p className="score-text">Host (White)</p>
+              <div style={{display: 'flex', alignItems: 'center', gap: '5px', justifyContent: 'center', marginBottom: '5px'}}>
+                  <p className="score-text" style={{margin: 0}}>Host (White)</p>
+                  <span id="local-mic-indicator" style={{display: 'none', transition: 'transform 0.1s'}}>🎤</span>
+              </div>
               <p className="score-val" id="score-user">0</p>
           </div>
           <div className="score-box system-box">
-              <p className="score-text">Guest (Black)</p>
+              <div style={{display: 'flex', alignItems: 'center', gap: '5px', justifyContent: 'center', marginBottom: '5px'}}>
+                  <p className="score-text" style={{margin: 0}}>Guest (Black)</p>
+                  <span id="remote-mic-indicator" style={{display: 'none', transition: 'transform 0.1s'}}>🎤</span>
+              </div>
               <p className="score-val" id="score-system">0</p>
           </div>
       </div>

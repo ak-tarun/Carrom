@@ -56,6 +56,7 @@ export default function App() {
             
             // Re-establish presence when reconnecting
             if (myUserId) {
+                onDisconnect(myPresenceRef).remove();
                 updatePresence(isGameRunning ? 'in-game' : 'online');
             }
         } else {
@@ -445,7 +446,7 @@ export default function App() {
                 lobbyPanel.style.display = 'flex';
                 document.getElementById('panel-main').style.display = 'block';
                 document.getElementById('panel-waiting').style.display = 'none';
-                if (gameMode === 'multi' && currentRoom && myRole === 'host') {
+                if (gameMode === 'multi' && currentRoom) {
                     remove(ref(db, `rooms/${currentRoom}`));
                 }
                 currentRoom = null;
@@ -1660,7 +1661,7 @@ export default function App() {
                                             document.getElementById('lobby').style.display = 'flex';
                                             document.getElementById('panel-main').style.display = 'block';
                                             document.getElementById('panel-waiting').style.display = 'none';
-                                            if (myRole === 'host') remove(ref(db, `rooms/${currentRoom}`));
+                                            if (currentRoom) remove(ref(db, `rooms/${currentRoom}`));
                                             currentRoom = null;
                                             if (oppPresenceUnsubscribe) {
                                                 oppPresenceUnsubscribe();
@@ -1669,25 +1670,6 @@ export default function App() {
                                         }
                                     }, 30000);
                                 }
-                            } else if (presenceSnap.exists() && presenceSnap.val().status !== 'in-game' && isGameRunning) {
-                                // Opponent intentionally left the game
-                                alert("Opponent has left the game.");
-                                isGameRunning = false;
-                                cleanupGameListeners();
-                                updatePresence('online');
-                                document.getElementById('lobby').style.display = 'flex';
-                                document.getElementById('panel-main').style.display = 'block';
-                                document.getElementById('panel-waiting').style.display = 'none';
-                                if (myRole === 'host') remove(ref(db, `rooms/${currentRoom}`));
-                                currentRoom = null;
-                                if (oppPresenceUnsubscribe) {
-                                    oppPresenceUnsubscribe();
-                                    oppPresenceUnsubscribe = null;
-                                }
-                                if (opponentDisconnectTimeout) {
-                                    clearTimeout(opponentDisconnectTimeout);
-                                    opponentDisconnectTimeout = null;
-                                }
                             } else {
                                 if (opponentDisconnectTimeout) {
                                     clearTimeout(opponentDisconnectTimeout);
@@ -1695,6 +1677,7 @@ export default function App() {
                                 }
                             }
                         });
+                        gameUnsubscribes.push(oppPresenceUnsubscribe);
                     }
                 }
             }));

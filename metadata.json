@@ -1,5 +1,5 @@
 {
-  "name": "",
-  "description": "",
-  "requestFramePermissions": []
+  "name": "Carrom Multiplayer",
+  "description": "A multiplayer Carrom game with voice chat and AI practice mode.",
+  "requestFramePermissions": ["microphone"]
 }

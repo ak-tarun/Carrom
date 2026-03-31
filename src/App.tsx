@@ -1302,7 +1302,19 @@ export default function App() {
         }
 
         try {
-            peer = new window.Peer(); 
+            if (peer) {
+                peer.destroy();
+            }
+            
+            peer = new window.Peer({
+                config: {
+                    'iceServers': [
+                        { url: 'stun:stun.l.google.com:19302' },
+                        { url: 'stun:stun1.l.google.com:19302' },
+                        { url: 'stun:stun2.l.google.com:19302' }
+                    ]
+                }
+            }); 
 
             peer.on('error', (err) => {
                 console.error("PeerJS Error:", err);
@@ -1342,15 +1354,25 @@ export default function App() {
                             const dest = ctx.createMediaStreamDestination();
                             streamToUse = dest.stream;
                         }
-                        const call = peer.call(hostVoiceId, streamToUse);
-                        call.on('stream', (remoteStream) => {
-                            const remoteAudio = document.getElementById('remote-audio');
-                            if (remoteAudio) {
-                                remoteAudio.srcObject = remoteStream;
-                                remoteAudio.play().catch(e => console.error("Audio play error:", e));
-                                monitorAudioLevel(remoteStream, 'remote-mic-indicator');
+                        
+                        // Add a slight delay to ensure host is ready to receive the call
+                        setTimeout(() => {
+                            const call = peer.call(hostVoiceId, streamToUse);
+                            if (call) {
+                                call.on('stream', (remoteStream) => {
+                                    const remoteAudio = document.getElementById('remote-audio');
+                                    if (remoteAudio) {
+                                        remoteAudio.srcObject = remoteStream;
+                                        remoteAudio.play().catch(e => console.error("Audio play error:", e));
+                                        monitorAudioLevel(remoteStream, 'remote-mic-indicator');
+                                    }
+                                });
+                                call.on('error', (err) => {
+                                    console.error("PeerJS Call Error:", err);
+                                });
                             }
-                        });
+                        }, 1000);
+                        
                         unsubscribe();
                     }
                 });
@@ -1478,6 +1500,16 @@ export default function App() {
         initVoiceChat();
         
         lobbyEl.style.display = 'none';
+        
+        // Reset game state variables
+        score = { host: 0, guest: 0 };
+        queenStatus = { active: true, pocketedBy: null, needsCover: false };
+        turnEvents = { pocketedOwn: false, pocketedQueen: false, foul: false };
+        onlineTurn = 'host';
+        opponentAiming = false;
+        aiThinking = false;
+        gameState = 'POSITIONING';
+        
         initCoins();
         
         if (myRole === 'host') {

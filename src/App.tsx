@@ -1,5 +1,5 @@
 // @ts-nocheck
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { initializeApp } from "firebase/app";
 import { getDatabase, ref, set, onValue, get, update, onDisconnect, push, remove, onChildAdded } from "firebase/database";
 import { Network } from '@capacitor/network';
@@ -7,7 +7,12 @@ import { App as CapacitorApp } from '@capacitor/app';
 
 let initialized = false;
 
+import ChessGame from './components/chess/ChessGame';
+
 export default function App() {
+  const [showChess, setShowChess] = useState(false);
+  const [chessConfig, setChessConfig] = useState({ roomCode: '', role: '' });
+
   useEffect(() => {
     if (initialized) return;
     initialized = true;
@@ -226,7 +231,8 @@ export default function App() {
             
             // Use inviter's name from invite or fetch it
             const inviterName = invite.fromName || `Player ${invite.from.substring(5, 9)}`;
-            document.getElementById('invite-text').innerText = `${inviterName} invited you to play!`;
+            const gameName = invite.game === 'chess' ? 'Chess' : 'Carrom';
+            document.getElementById('invite-text').innerText = `${inviterName} invited you to play ${gameName}!`;
             document.getElementById('invite-modal').style.display = 'flex';
             
             window.acceptInvite = async () => {
@@ -239,7 +245,15 @@ export default function App() {
                 myRole = 'guest';
                 gameMode = 'multi';
                 await update(ref(db, `rooms/${currentRoom}`), { status: 'playing', guestId: myUserId });
-                startGame();
+                
+                if (invite.game === 'chess') {
+                    setChessConfig({ roomCode: currentRoom, role: 'guest' });
+                    setShowChess(true);
+                    document.getElementById('lobby').style.display = 'none';
+                    document.getElementById('carrom-ui').style.display = 'none';
+                } else {
+                    startGame();
+                }
             };
             
             window.declineInvite = async () => {
@@ -256,18 +270,21 @@ export default function App() {
         const errorText = document.getElementById('lobby-error');
         errorText.innerText = "Sending invite...";
         
+        const selectedGame = document.querySelector('input[name="game-select"]:checked').value;
+
         try {
             const code = Math.random().toString(36).substring(2, 8).toUpperCase();
             currentRoom = code;
             myRole = 'host';
             
-            await set(ref(db, `rooms/${code}`), { status: 'waiting', turn: 'host', hostId: myUserId });
+            await set(ref(db, `rooms/${code}`), { status: 'waiting', turn: 'host', hostId: myUserId, game: selectedGame });
             
             // Send the invite
             await set(ref(db, `invites/${targetUserId}`), {
                 from: myUserId,
                 fromName: myName,
                 roomId: code,
+                game: selectedGame,
                 status: 'pending',
                 timestamp: Date.now()
             });
@@ -281,7 +298,14 @@ export default function App() {
             const inviteListener = onValue(ref(db, `invites/${targetUserId}`), (snapshot) => {
                 const invite = snapshot.val();
                 if (invite && invite.status === 'accepted') {
-                    startGame();
+                    if (selectedGame === 'chess') {
+                        setChessConfig({ roomCode: code, role: 'host' });
+                        setShowChess(true);
+                        document.getElementById('lobby').style.display = 'none';
+                        document.getElementById('carrom-ui').style.display = 'none';
+                    } else {
+                        startGame();
+                    }
                     // Clean up listener (simplified for this context)
                 } else if (invite && invite.status === 'declined') {
                     document.getElementById('panel-waiting').style.display = 'none';
@@ -300,7 +324,16 @@ export default function App() {
             
             // Also listen for normal room join just in case
             onValue(ref(db, `rooms/${code}/status`), (snapshot) => {
-                if(snapshot.val() === 'playing' && !isGameRunning) startGame();
+                if(snapshot.val() === 'playing' && !isGameRunning) {
+                    if (selectedGame === 'chess') {
+                        setChessConfig({ roomCode: code, role: 'host' });
+                        setShowChess(true);
+                        document.getElementById('lobby').style.display = 'none';
+                        document.getElementById('carrom-ui').style.display = 'none';
+                    } else {
+                        startGame();
+                    }
+                }
             });
         } catch (err) {
             errorText.innerText = "Error sending invite.";
@@ -408,6 +441,8 @@ export default function App() {
     CapacitorApp.addListener('backButton', ({ canGoBack }) => {
         const historyModal = document.getElementById('history-modal');
         const inviteModal = document.getElementById('invite-modal');
+        const settingsModal = document.getElementById('settings-modal');
+        const rulesModal = document.getElementById('rules-modal');
         const gameOverOverlay = document.getElementById('game-over-overlay');
         const lobbyPanel = document.getElementById('lobby');
 
@@ -418,6 +453,16 @@ export default function App() {
 
         if (historyModal && historyModal.style.display === 'flex') {
             historyModal.style.display = 'none';
+            return;
+        }
+
+        if (settingsModal && settingsModal.style.display === 'flex') {
+            settingsModal.style.display = 'none';
+            return;
+        }
+
+        if (rulesModal && rulesModal.style.display === 'flex') {
+            rulesModal.style.display = 'none';
             return;
         }
 
@@ -1106,11 +1151,21 @@ export default function App() {
 
     document.getElementById('btn-single').addEventListener('click', () => {
         initAudio();
-        gameMode = 'single';
-        aiDifficulty = document.querySelector('input[name="difficulty"]:checked').value;
-        myRole = 'host';
-        currentRoom = 'local';
-        startGame();
+        const selectedGame = document.querySelector('input[name="game-select"]:checked').value;
+        if (selectedGame === 'chess') {
+            const localCode = 'local_' + Math.random().toString(36).substring(2, 8);
+            const difficulty = document.querySelector('input[name="difficulty"]:checked').value;
+            setChessConfig({ roomCode: localCode, role: 'local', aiDifficulty: difficulty });
+            setShowChess(true);
+            document.getElementById('lobby').style.display = 'none';
+            document.getElementById('carrom-ui').style.display = 'none';
+        } else {
+            gameMode = 'single';
+            aiDifficulty = document.querySelector('input[name="difficulty"]:checked').value;
+            myRole = 'host';
+            currentRoom = 'local';
+            startGame();
+        }
     });
 
     // --- COMMS SYSTEM ---
@@ -1400,6 +1455,14 @@ export default function App() {
     document.getElementById('btn-close-settings').addEventListener('click', () => {
         document.getElementById('settings-modal').style.display = 'none';
     });
+
+    document.getElementById('btn-rules').addEventListener('click', () => {
+        document.getElementById('rules-modal').style.display = 'flex';
+    });
+
+    document.getElementById('btn-close-rules').addEventListener('click', () => {
+        document.getElementById('rules-modal').style.display = 'none';
+    });
     
     document.getElementById('btn-save-name').addEventListener('click', () => {
         const newName = document.getElementById('input-username').value.trim();
@@ -1422,6 +1485,7 @@ export default function App() {
         await requestMicAccess();
         gameMode = 'multi';
         
+        const selectedGame = document.querySelector('input[name="game-select"]:checked').value;
         const btnCreate = document.getElementById('btn-create');
         const originalText = btnCreate.innerText;
         btnCreate.innerText = "Creating...";
@@ -1434,7 +1498,7 @@ export default function App() {
             myRole = 'host';
             secureRoomSetup(code);
             
-            await set(ref(db, `rooms/${code}`), { status: 'waiting', turn: 'host', hostId: myUserId });
+            await set(ref(db, `rooms/${code}`), { status: 'waiting', turn: 'host', hostId: myUserId, game: selectedGame });
             
             document.getElementById('panel-main').style.display = 'none';
             document.getElementById('panel-waiting').style.display = 'block';
@@ -1442,7 +1506,16 @@ export default function App() {
             errorText.innerText = "";
 
             onValue(ref(db, `rooms/${code}/status`), (snapshot) => {
-                if(snapshot.val() === 'playing') startGame();
+                if(snapshot.val() === 'playing') {
+                    if (selectedGame === 'chess') {
+                        setChessConfig({ roomCode: code, role: 'host' });
+                        setShowChess(true);
+                        document.getElementById('lobby').style.display = 'none';
+                        document.getElementById('carrom-ui').style.display = 'none';
+                    } else {
+                        startGame();
+                    }
+                }
             });
         } catch (err) {
             errorText.innerText = "Firebase Error. Please check your console.";
@@ -1476,8 +1549,17 @@ export default function App() {
             if(snapshot.exists() && snapshot.val().status === 'waiting') {
                 currentRoom = code;
                 myRole = 'guest';
+                const gameType = snapshot.val().game || 'carrom';
                 await update(roomRef, { status: 'playing', guestId: myUserId });
-                startGame();
+                
+                if (gameType === 'chess') {
+                    setChessConfig({ roomCode: code, role: 'guest' });
+                    setShowChess(true);
+                    document.getElementById('lobby').style.display = 'none';
+                    document.getElementById('carrom-ui').style.display = 'none';
+                } else {
+                    startGame();
+                }
             } else {
                 errorText.innerText = "Room not found or already full.";
             }
@@ -1738,9 +1820,21 @@ export default function App() {
 
       <div id="lobby">
           <div className="lobby-panel" id="panel-main" style={{ position: 'relative' }}>
+              <button id="btn-rules" style={{ position: 'absolute', top: '20px', right: '60px', background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '20px' }}>❓</button>
               <button id="btn-settings" style={{ position: 'absolute', top: '20px', right: '20px', background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '20px' }}>⚙️</button>
               <h1 style={{fontSize: '32px', fontWeight: 900, margin: '0 0 20px 0', color: 'var(--accent)', letterSpacing: '2px', textTransform: 'uppercase'}}>Carrom</h1>
               
+              <div className="lobby-section">
+                  <h3 className="section-title">Select Game</h3>
+                  <div className="segmented-control-2">
+                      <input type="radio" id="game-carrom" name="game-select" value="carrom" defaultChecked />
+                      <label htmlFor="game-carrom">Carrom</label>
+                      <input type="radio" id="game-chess" name="game-select" value="chess" />
+                      <label htmlFor="game-chess">Chess</label>
+                      <div className="pill-2"></div>
+                  </div>
+              </div>
+
               <div className="lobby-section">
                   <h3 className="section-title">Play Online</h3>
                   <button className="lobby-btn primary" id="btn-create">Create Room</button>
@@ -1816,6 +1910,51 @@ export default function App() {
           </div>
       </div>
 
+      <div id="rules-modal" style={{ display: 'none', position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(9, 9, 11, 0.95)', zIndex: 400, flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}>
+          <div className="lobby-panel" style={{ width: '90%', maxWidth: '400px', maxHeight: '80vh', display: 'flex', flexDirection: 'column', padding: '30px 20px', overflowY: 'auto' }}>
+              <h2 style={{ marginTop: 0, color: 'var(--text-main)', textAlign: 'center', fontSize: '24px' }}>How to Play</h2>
+              
+              <div className="lobby-section" style={{ marginTop: '20px', textAlign: 'left', color: 'var(--text-muted)', fontSize: '14px', lineHeight: '1.6' }}>
+                  <h3 style={{ color: 'var(--text-main)', marginBottom: '10px' }}>Controls</h3>
+                  
+                  {/* Visual Tutorial Area */}
+                  <div style={{ position: 'relative', width: '100%', height: '140px', background: 'var(--board-wood)', borderRadius: '10px', border: '4px solid var(--board-border)', marginBottom: '15px', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {/* Baseline */}
+                      <div style={{ position: 'absolute', bottom: '30px', width: '80%', height: '2px', background: '#3e2723', opacity: 0.5 }}></div>
+                      <div style={{ position: 'absolute', bottom: '25px', width: '80%', height: '2px', background: '#3e2723', opacity: 0.5 }}></div>
+                      
+                      {/* Coin */}
+                      <div className="tut-coin" style={{ position: 'absolute', bottom: '60px', left: '50%', width: '18px', height: '18px', background: '#3f3f46', borderRadius: '50%', border: '2px solid #27272a', boxShadow: 'inset 0 0 4px rgba(0,0,0,0.5), 0 2px 4px rgba(0,0,0,0.5)', zIndex: 1 }}></div>
+
+                      {/* Striker */}
+                      <div className="tut-striker" style={{ position: 'absolute', bottom: '20px', left: '50%', width: '24px', height: '24px', background: '#e2e8f0', borderRadius: '50%', border: '2px solid #94a3b8', boxShadow: 'inset 0 0 4px rgba(0,0,0,0.3), 0 2px 4px rgba(0,0,0,0.5)', zIndex: 2 }}></div>
+                      
+                      {/* Aim Line */}
+                      <div className="tut-aim-line" style={{ position: 'absolute', bottom: '32px', left: '50%', width: '4px', background: 'rgba(255, 255, 255, 0.7)', transformOrigin: 'bottom center', zIndex: 1, transform: 'translateX(-50%)' }}></div>
+                      
+                      {/* Hand/Pointer */}
+                      <div className="tut-hand" style={{ position: 'absolute', bottom: '5px', left: '50%', fontSize: '24px', zIndex: 3, textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>👆</div>
+                  </div>
+
+                  <ul style={{ paddingLeft: '20px', marginBottom: '20px' }}>
+                      <li><strong>Move Striker:</strong> Drag the striker horizontally along the baseline before shooting.</li>
+                      <li><strong>Aim & Shoot:</strong> Click/Touch and drag backwards from the striker to aim. Release to shoot.</li>
+                      <li>The longer you drag, the more power your shot will have.</li>
+                  </ul>
+
+                  <h3 style={{ color: 'var(--text-main)', marginBottom: '10px' }}>Rules</h3>
+                  <ul style={{ paddingLeft: '20px', marginBottom: '20px' }}>
+                      <li><strong>Objective:</strong> Pocket all your coins (White for Host, Black for Guest) before your opponent.</li>
+                      <li><strong>The Queen (Red):</strong> Must be pocketed before your last coin. If you pocket the Queen, you must pocket one of your own coins on the very next shot to "cover" it. If you fail, the Queen is returned to the center.</li>
+                      <li><strong>Fouls:</strong> Pocketing the striker is a foul. A foul results in one of your pocketed coins being returned to the board, and you lose your turn.</li>
+                      <li><strong>Turns:</strong> You get another turn if you successfully pocket one of your own coins.</li>
+                  </ul>
+              </div>
+
+              <button className="lobby-btn outline" id="btn-close-rules" style={{ marginTop: '20px' }}>Close</button>
+          </div>
+      </div>
+
       <div id="invite-modal" style={{ display: 'none', position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(9, 9, 11, 0.95)', zIndex: 300, flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}>
           <div className="lobby-panel" style={{ width: '90%', maxWidth: '350px', display: 'flex', flexDirection: 'column', padding: '30px 20px', textAlign: 'center' }}>
               <h2 style={{ marginTop: 0, color: 'var(--text-main)', fontSize: '22px' }}>Game Invite</h2>
@@ -1827,53 +1966,57 @@ export default function App() {
           </div>
       </div>
 
-      <div className="header">
-          <div className="score-box user-box">
-              <div style={{display: 'flex', alignItems: 'center', gap: '5px', justifyContent: 'center', marginBottom: '5px'}}>
-                  <p className="score-text" style={{margin: 0}}>Host (White)</p>
-                  <span id="local-mic-indicator" style={{display: 'none', transition: 'transform 0.1s'}}>🎤</span>
+      <div id="carrom-ui" style={{ display: showChess ? 'none' : 'block' }}>
+          <div className="header">
+              <div className="score-box user-box">
+                  <div style={{display: 'flex', alignItems: 'center', gap: '5px', justifyContent: 'center', marginBottom: '5px'}}>
+                      <p className="score-text" style={{margin: 0}}>Host (White)</p>
+                      <span id="local-mic-indicator" style={{display: 'none', transition: 'transform 0.1s'}}>🎤</span>
+                  </div>
+                  <p className="score-val" id="score-user">0</p>
               </div>
-              <p className="score-val" id="score-user">0</p>
-          </div>
-          <div className="score-box system-box">
-              <div style={{display: 'flex', alignItems: 'center', gap: '5px', justifyContent: 'center', marginBottom: '5px'}}>
-                  <p className="score-text" style={{margin: 0}}>Guest (Black)</p>
-                  <span id="remote-mic-indicator" style={{display: 'none', transition: 'transform 0.1s'}}>🎤</span>
-              </div>
-              <p className="score-val" id="score-system">0</p>
-          </div>
-      </div>
-      
-      <div id="status">Waiting for players...</div>
-      
-      <div id="game-container">
-          <canvas id="carromBoard" width="350" height="350"></canvas>
-
-          <div id="game-over-overlay">
-              <h2 id="go-text" style={{color: 'var(--text-main)', textAlign: 'center', padding: '0 10px', fontSize: '32px', fontWeight: 800, textShadow: '0 4px 15px rgba(0,0,0,0.5)', marginBottom: '5px', letterSpacing: '-0.5px'}}>Game Over</h2>
-              <p style={{color: 'var(--text-muted)', fontSize: '14px', marginBottom: '30px', fontWeight: 500}}>Both players will reset to a new game.</p>
-              <button className="lobby-btn primary" id="btn-rematch" style={{width: '220px'}}>Play Again</button>
-          </div>
-      </div>
-
-      <audio id="remote-audio" autoPlay playsInline></audio>
-
-      <div id="comms-panel" style={{display: 'none', position: 'relative', width: '100%', maxWidth: 'min(94vw, 420px)', zIndex: 50, flexDirection: 'column', gap: '10px', marginTop: '10px', paddingBottom: '20px'}}>
-          <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-              <span style={{color: 'var(--text-muted)', fontSize: '12px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '1px'}}>Voice & Chat</span>
-              <button id="btn-mic-toggle" style={{background: 'rgba(239, 68, 68, 0.9)', border: '1px solid rgba(255,255,255,0.1)', padding: '8px 16px', borderRadius: '20px', color: 'white', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 4px 10px rgba(0,0,0,0.3)'}}>
-                  🎤 Mic Off
-              </button>
-          </div>
-
-          <div style={{background: 'rgba(24, 24, 27, 0.8)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px', padding: '12px', boxShadow: 'inset 0 2px 10px rgba(0,0,0,0.2)'}}>
-              <div id="chat-messages" style={{height: '100px', overflowY: 'auto', color: 'white', fontSize: '13px', marginBottom: '10px', display: 'flex', flexDirection: 'column', gap: '6px', paddingRight: '5px'}}></div>
-              <div style={{display: 'flex', gap: '8px'}}>
-                  <input type="text" id="chat-input" placeholder="Type message..." style={{flex: 1, padding: '10px 14px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.4)', color: 'white', outline: 'none', fontSize: '14px', fontFamily: "'Outfit', sans-serif"}} />
-                  <button id="btn-send" style={{padding: '10px 16px', borderRadius: '10px', border: 'none', background: 'linear-gradient(135deg, var(--accent), #ea580c)', color: 'white', fontWeight: 800, cursor: 'pointer', textTransform: 'uppercase', fontSize: '13px', boxShadow: '0 4px 10px rgba(245, 158, 11, 0.3)'}}>Send</button>
+              <div className="score-box system-box">
+                  <div style={{display: 'flex', alignItems: 'center', gap: '5px', justifyContent: 'center', marginBottom: '5px'}}>
+                      <p className="score-text" style={{margin: 0}}>Guest (Black)</p>
+                      <span id="remote-mic-indicator" style={{display: 'none', transition: 'transform 0.1s'}}>🎤</span>
+                  </div>
+                  <p className="score-val" id="score-system">0</p>
               </div>
           </div>
+          
+          <div id="status">Waiting for players...</div>
+          
+          <div id="game-container">
+              <canvas id="carromBoard" width="350" height="350"></canvas>
+
+              <div id="game-over-overlay">
+                  <h2 id="go-text" style={{color: 'var(--text-main)', textAlign: 'center', padding: '0 10px', fontSize: '32px', fontWeight: 800, textShadow: '0 4px 15px rgba(0,0,0,0.5)', marginBottom: '5px', letterSpacing: '-0.5px'}}>Game Over</h2>
+                  <p style={{color: 'var(--text-muted)', fontSize: '14px', marginBottom: '30px', fontWeight: 500}}>Both players will reset to a new game.</p>
+                  <button className="lobby-btn primary" id="btn-rematch" style={{width: '220px'}}>Play Again</button>
+              </div>
+          </div>
+
+          <audio id="remote-audio" autoPlay playsInline></audio>
+
+          <div id="comms-panel" style={{display: 'none', position: 'relative', width: '100%', maxWidth: 'min(94vw, 420px)', zIndex: 50, flexDirection: 'column', gap: '10px', marginTop: '10px', paddingBottom: '20px'}}>
+              <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                  <span style={{color: 'var(--text-muted)', fontSize: '12px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '1px'}}>Voice & Chat</span>
+                  <button id="btn-mic-toggle" style={{background: 'rgba(239, 68, 68, 0.9)', border: '1px solid rgba(255,255,255,0.1)', padding: '8px 16px', borderRadius: '20px', color: 'white', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 4px 10px rgba(0,0,0,0.3)'}}>
+                      🎤 Mic Off
+                  </button>
+              </div>
+
+              <div style={{background: 'rgba(24, 24, 27, 0.8)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px', padding: '12px', boxShadow: 'inset 0 2px 10px rgba(0,0,0,0.2)'}}>
+                  <div id="chat-messages" style={{height: '100px', overflowY: 'auto', color: 'white', fontSize: '13px', marginBottom: '10px', display: 'flex', flexDirection: 'column', gap: '6px', paddingRight: '5px'}}></div>
+                  <div style={{display: 'flex', gap: '8px'}}>
+                      <input type="text" id="chat-input" placeholder="Type message..." style={{flex: 1, padding: '10px 14px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.4)', color: 'white', outline: 'none', fontSize: '14px', fontFamily: "'Outfit', sans-serif"}} />
+                      <button id="btn-send" style={{padding: '10px 16px', borderRadius: '10px', border: 'none', background: 'linear-gradient(135deg, var(--accent), #ea580c)', color: 'white', fontWeight: 800, cursor: 'pointer', textTransform: 'uppercase', fontSize: '13px', boxShadow: '0 4px 10px rgba(245, 158, 11, 0.3)'}}>Send</button>
+                  </div>
+              </div>
+          </div>
       </div>
+
+      {showChess && <ChessGame roomCode={chessConfig.roomCode} role={chessConfig.role} aiDifficulty={chessConfig.aiDifficulty} />}
     </>
   );
 }

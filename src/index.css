@@ -463,6 +463,54 @@ canvas {
 }
 
 /* Segmented Control */
+.segmented-control-2 {
+    display: flex;
+    background: rgba(0, 0, 0, 0.6);
+    border-radius: 16px;
+    padding: 4px;
+    margin: 10px 0 20px 0;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    position: relative;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);
+}
+
+.segmented-control-2 input {
+    display: none;
+}
+
+.segmented-control-2 label {
+    flex: 1;
+    padding: 12px;
+    text-align: center;
+    font-size: 14px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.8);
+    cursor: pointer;
+    transition: color 0.3s ease;
+    z-index: 1;
+}
+
+.segmented-control-2 input:checked + label {
+    color: #ffffff;
+    text-shadow: 0 0 10px rgba(0,0,0,0.3);
+}
+
+.pill-2 {
+    position: absolute;
+    top: 4px;
+    bottom: 4px;
+    left: 4px;
+    width: calc((100% - 8px) / 2);
+    background: linear-gradient(135deg, var(--accent), #ea580c);
+    border-radius: 12px;
+    transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    z-index: 0;
+    box-shadow: 0 4px 10px rgba(245, 158, 11, 0.4);
+}
+
+#game-carrom:checked ~ .pill-2 { transform: translateX(0); }
+#game-chess:checked ~ .pill-2 { transform: translateX(100%); }
+
 .segmented-control {
     display: flex;
     background: rgba(0, 0, 0, 0.6);
@@ -539,4 +587,43 @@ select.lobby-input {
 select.lobby-input option {
     background: var(--bg-darker);
     color: white;
+}
+
+/* Tutorial Visual Animations */
+.tut-striker {
+    animation: tutMove 4s infinite ease-in-out;
+}
+.tut-aim-line {
+    animation: tutAim 4s infinite ease-in-out;
+}
+.tut-hand {
+    animation: tutHand 4s infinite ease-in-out;
+}
+.tut-coin {
+    animation: tutCoin 4s infinite ease-out;
+}
+
+@keyframes tutMove {
+    0%, 15% { transform: translateX(calc(-50% + 60px)); opacity: 1; }
+    30%, 50% { transform: translateX(-50%); opacity: 1; }
+    65% { transform: translateX(-50%) translateY(-30px); opacity: 1; }
+    75%, 100% { transform: translateX(-50%) translateY(-30px); opacity: 0; }
+}
+
+@keyframes tutAim {
+    0%, 50% { height: 0px; opacity: 0; }
+    60% { height: 50px; opacity: 1; }
+    65%, 100% { height: 0px; opacity: 0; }
+}
+
+@keyframes tutHand {
+    0%, 15% { transform: translate(calc(-50% + 60px), 0) scale(1.2); opacity: 1; }
+    30%, 50% { transform: translate(-50%, 0) scale(1.2); opacity: 1; }
+    60% { transform: translate(-50%, 50px) scale(1); opacity: 1; }
+    65%, 100% { transform: translate(-50%, 50px) scale(1.2); opacity: 0; }
+}
+
+@keyframes tutCoin {
+    0%, 65% { transform: translate(-50%, 0); opacity: 1; }
+    75%, 100% { transform: translate(-50%, -100px); opacity: 0; }
 }

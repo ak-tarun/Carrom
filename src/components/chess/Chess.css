@@ -1,0 +1,512 @@
+.chess-game-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100vh;
+  width: 100vw;
+  background: linear-gradient(135deg, #1e1b4b, #0f172a);
+  color: #f8fafc;
+  font-family: 'Outfit', sans-serif;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+.chess-header {
+  text-align: center;
+  margin-bottom: 30px;
+  width: 100%;
+  max-width: 800px;
+}
+
+.chess-title {
+  font-size: 36px;
+  font-weight: 900;
+  margin: 0 0 15px 0;
+  color: #fbbf24;
+  text-transform: uppercase;
+  letter-spacing: 3px;
+  text-shadow: 0 4px 15px rgba(251, 191, 36, 0.4);
+}
+
+.chess-header-controls {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 15px;
+  flex-wrap: wrap;
+}
+
+.chess-room-info {
+  font-size: 14px;
+  color: #e2e8f0;
+  background: rgba(15, 23, 42, 0.6);
+  padding: 10px 20px;
+  border-radius: 30px;
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  font-weight: 500;
+}
+
+.chess-leave-btn {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  color: #fca5a5;
+  padding: 10px 20px;
+  border-radius: 30px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.chess-leave-btn:hover {
+  background: rgba(239, 68, 68, 0.8);
+  color: #fff;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);
+}
+
+.role-badge {
+  font-weight: bold;
+}
+.role-badge.host { color: #fbbf24; }
+.role-badge.guest { color: #cbd5e1; }
+
+.chess-main {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+  max-width: 800px;
+  align-items: center;
+}
+
+@media (min-width: 768px) {
+  .chess-main {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: center;
+  }
+}
+
+.chess-board-wrapper {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  max-width: 500px;
+}
+
+.chess-board-container {
+  width: 100%;
+  background: rgba(15, 23, 42, 0.85);
+  border-radius: 20px;
+  padding: 24px;
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(20px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.chess-status-bar {
+  text-align: center;
+  margin-bottom: 16px;
+  font-weight: 800;
+  font-size: 18px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.3s ease;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.chess-status-bar.my-turn {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.5);
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.2);
+}
+
+.chess-status-bar.my-turn .status-text {
+  color: #34d399;
+  text-shadow: 0 0 10px rgba(52, 211, 153, 0.5);
+}
+
+.chess-status-bar.opponent-turn {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.5);
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.2);
+}
+
+.chess-status-bar.opponent-turn .status-text {
+  color: #f87171;
+  text-shadow: 0 0 10px rgba(248, 113, 113, 0.5);
+}
+
+.status-text { color: #f8fafc; transition: color 0.3s ease; }
+.status-text.danger { color: #ef4444 !important; text-shadow: 0 0 10px rgba(239, 68, 68, 0.5) !important; }
+.status-text.warning { color: #fbbf24 !important; text-shadow: 0 0 10px rgba(251, 191, 36, 0.5) !important; }
+
+.chess-player-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: #e2e8f0;
+  padding: 8px 16px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: inline-block;
+  margin: 10px 0;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+  letter-spacing: 1px;
+}
+
+.chess-player-name.top-player {
+  margin-bottom: 12px;
+  margin-top: 0;
+}
+
+.chess-player-name.bottom-player {
+  margin-top: 12px;
+  margin-bottom: 0;
+}
+
+.chess-board-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1/1;
+  border: 4px solid #1e293b;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.6), inset 0 0 10px rgba(0,0,0,0.5);
+}
+
+.chess-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  grid-template-rows: repeat(8, 1fr);
+  width: 100%;
+  height: 100%;
+}
+
+.chess-square {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.2s, transform 0.1s;
+}
+
+.chess-square.light { background-color: #e2e8f0; }
+.chess-square.dark { background-color: #64748b; }
+
+.chess-square.selected {
+  background-color: rgba(251, 191, 36, 0.8) !important;
+  box-shadow: inset 0 0 10px rgba(0,0,0,0.2);
+}
+
+.chess-square.last-move {
+  background-color: rgba(251, 191, 36, 0.4);
+}
+
+.chess-square.in-check {
+  background-color: rgba(239, 68, 68, 0.6) !important;
+  box-shadow: inset 0 0 20px rgba(239, 68, 68, 0.9);
+}
+
+.move-hint {
+  width: 25%;
+  height: 25%;
+  background-color: rgba(0, 0, 0, 0.25);
+  border-radius: 50%;
+  pointer-events: none;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);
+}
+
+.capture-hint {
+  position: absolute;
+  width: 90%;
+  height: 90%;
+  border: 5px solid rgba(0, 0, 0, 0.25);
+  border-radius: 50%;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+.chess-piece {
+  user-select: none;
+  cursor: grab;
+  z-index: 10;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.chess-piece:active {
+  cursor: grabbing;
+  transform: scale(1.15) translateY(-5px);
+}
+
+.chess-piece-img {
+  width: 90%;
+  height: 90%;
+  object-fit: contain;
+  pointer-events: none;
+  filter: drop-shadow(0px 8px 6px rgba(0, 0, 0, 0.5)) drop-shadow(0px 3px 3px rgba(0, 0, 0, 0.3));
+  transition: filter 0.2s ease;
+}
+
+.chess-piece:active .chess-piece-img {
+  filter: drop-shadow(0px 15px 12px rgba(0, 0, 0, 0.4)) drop-shadow(0px 5px 5px rgba(0, 0, 0, 0.2));
+}
+
+.white-piece {
+  /* Removed text-based styling since we use images now */
+}
+
+.black-piece {
+  /* Removed text-based styling since we use images now */
+}
+
+.promotion-modal {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(15, 23, 42, 0.8);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+}
+
+.promotion-content {
+  background: #1e293b;
+  padding: 20px;
+  border-radius: 12px;
+  border: 2px solid #fbbf24;
+  text-align: center;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+}
+
+.promotion-content h3 {
+  margin: 0 0 15px 0;
+  color: #f8fafc;
+}
+
+.promotion-options {
+  display: flex;
+  gap: 10px;
+}
+
+.promotion-options button {
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 8px;
+  padding: 10px;
+  cursor: pointer;
+  transition: background 0.2s;
+  width: 60px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.promotion-options button:hover {
+  background: rgba(255,255,255,0.2);
+}
+
+.game-over-overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 30;
+  animation: fadeIn 0.5s ease;
+}
+
+.game-over-content {
+  background: linear-gradient(135deg, #1e293b, #0f172a);
+  padding: 30px 40px;
+  border-radius: 20px;
+  border: 2px solid #fbbf24;
+  text-align: center;
+  box-shadow: 0 15px 35px rgba(0,0,0,0.6), inset 0 0 20px rgba(251, 191, 36, 0.1);
+  transform: scale(1);
+  animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.game-over-content h2 {
+  margin: 0 0 15px 0;
+  color: #fbbf24;
+  font-size: 32px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  text-shadow: 0 2px 10px rgba(251, 191, 36, 0.4);
+}
+
+.game-over-reason {
+  color: #f8fafc;
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes popIn {
+  from { transform: scale(0.8); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+/* Comms Panel */
+.chess-sidebar {
+  width: 100%;
+  max-width: 350px;
+}
+
+.comms-panel {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  border-radius: 16px;
+  padding: 16px;
+  backdrop-filter: blur(12px);
+  display: flex;
+  flex-direction: column;
+  height: 400px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+.comms-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+  padding-bottom: 10px;
+}
+
+.comms-header h3 {
+  margin: 0;
+  font-size: 18px;
+  color: #fbbf24;
+}
+
+.mic-btn {
+  background: rgba(239, 68, 68, 0.8);
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.mic-btn.active {
+  background: rgba(16, 185, 129, 0.8);
+}
+
+.chat-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding-right: 5px;
+}
+
+.chat-message {
+  background: rgba(255, 255, 255, 0.05);
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-size: 14px;
+  max-width: 85%;
+}
+
+.chat-message.sent {
+  align-self: flex-end;
+  background: rgba(59, 130, 246, 0.2);
+  border-bottom-right-radius: 2px;
+}
+
+.chat-message.received {
+  align-self: flex-start;
+  background: rgba(255, 255, 255, 0.1);
+  border-bottom-left-radius: 2px;
+}
+
+.sender-name {
+  font-size: 10px;
+  color: #94a3b8;
+  display: block;
+  margin-bottom: 2px;
+  font-weight: bold;
+}
+
+.chat-message p {
+  margin: 0;
+  word-break: break-word;
+}
+
+.chat-input-form {
+  display: flex;
+  gap: 8px;
+}
+
+.chat-input {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 10px;
+  color: white;
+  font-family: 'Outfit', sans-serif;
+}
+
+.chat-input:focus {
+  outline: none;
+  border-color: #fbbf24;
+}
+
+.chat-send-btn {
+  background: linear-gradient(135deg, #fbbf24, #d97706);
+  color: #0f172a;
+  border: none;
+  border-radius: 8px;
+  padding: 0 16px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.chat-send-btn:hover {
+  filter: brightness(1.1);
+}

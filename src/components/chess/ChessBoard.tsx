@@ -1,22 +1,23 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Chess } from 'chess.js';
+import { User, Bot } from 'lucide-react';
 
 const PIECE_IMAGES = {
   w: {
-    p: 'https://images.chesscomfiles.com/chess-themes/pieces/neo_wood/150/wp.png',
-    n: 'https://images.chesscomfiles.com/chess-themes/pieces/neo_wood/150/wn.png',
-    b: 'https://images.chesscomfiles.com/chess-themes/pieces/neo_wood/150/wb.png',
-    r: 'https://images.chesscomfiles.com/chess-themes/pieces/neo_wood/150/wr.png',
-    q: 'https://images.chesscomfiles.com/chess-themes/pieces/neo_wood/150/wq.png',
-    k: 'https://images.chesscomfiles.com/chess-themes/pieces/neo_wood/150/wk.png'
+    p: 'https://images.chesscomfiles.com/chess-themes/pieces/neo/150/wp.png',
+    n: 'https://images.chesscomfiles.com/chess-themes/pieces/neo/150/wn.png',
+    b: 'https://images.chesscomfiles.com/chess-themes/pieces/neo/150/wb.png',
+    r: 'https://images.chesscomfiles.com/chess-themes/pieces/neo/150/wr.png',
+    q: 'https://images.chesscomfiles.com/chess-themes/pieces/neo/150/wq.png',
+    k: 'https://images.chesscomfiles.com/chess-themes/pieces/neo/150/wk.png'
   },
   b: {
-    p: 'https://images.chesscomfiles.com/chess-themes/pieces/neo_wood/150/bp.png',
-    n: 'https://images.chesscomfiles.com/chess-themes/pieces/neo_wood/150/bn.png',
-    b: 'https://images.chesscomfiles.com/chess-themes/pieces/neo_wood/150/bb.png',
-    r: 'https://images.chesscomfiles.com/chess-themes/pieces/neo_wood/150/br.png',
-    q: 'https://images.chesscomfiles.com/chess-themes/pieces/neo_wood/150/bq.png',
-    k: 'https://images.chesscomfiles.com/chess-themes/pieces/neo_wood/150/bk.png'
+    p: 'https://images.chesscomfiles.com/chess-themes/pieces/neo/150/bp.png',
+    n: 'https://images.chesscomfiles.com/chess-themes/pieces/neo/150/bn.png',
+    b: 'https://images.chesscomfiles.com/chess-themes/pieces/neo/150/bb.png',
+    r: 'https://images.chesscomfiles.com/chess-themes/pieces/neo/150/br.png',
+    q: 'https://images.chesscomfiles.com/chess-themes/pieces/neo/150/bq.png',
+    k: 'https://images.chesscomfiles.com/chess-themes/pieces/neo/150/bk.png'
   }
 };
 
@@ -233,6 +234,7 @@ export default function ChessBoard({ fen, role, aiDifficulty, onMove, onGameOver
                       alt={`${piece.color} ${piece.type}`} 
                       className="chess-piece-img" 
                       draggable="false" 
+                      referrerPolicy="no-referrer"
                     />
                   </div>
                 )}
@@ -264,7 +266,8 @@ export default function ChessBoard({ fen, role, aiDifficulty, onMove, onGameOver
       </div>
       
       <div className="chess-player-name top-player">
-        {topPlayer}
+        {topPlayer?.includes('AI') ? <Bot size={18} /> : <User size={18} />}
+        <span>{topPlayer}</span>
       </div>
 
       <div className="chess-board-frame">
@@ -302,6 +305,7 @@ export default function ChessBoard({ fen, role, aiDifficulty, onMove, onGameOver
                       alt={`${pColor} ${p}`} 
                       className="chess-piece-img" 
                       draggable="false" 
+                      referrerPolicy="no-referrer"
                     />
                   </button>
                 )})}
@@ -312,7 +316,8 @@ export default function ChessBoard({ fen, role, aiDifficulty, onMove, onGameOver
       </div>
 
       <div className="chess-player-name bottom-player">
-        {bottomPlayer}
+        {bottomPlayer?.includes('AI') ? <Bot size={18} /> : <User size={18} />}
+        <span>{bottomPlayer}</span>
       </div>
 
       <audio ref={moveSoundRef} src="https://images.chesscomfiles.com/chess-themes/sounds/_MP3_/default/move-self.mp3" preload="auto" />

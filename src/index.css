@@ -223,21 +223,19 @@ canvas {
 }
 
 .lobby-panel {
-    background: rgba(20, 20, 23, 0.7); 
+    background: rgba(15, 23, 42, 0.75); 
     padding: clamp(24px, 6vw, 40px) clamp(20px, 5vw, 30px); 
-    border-radius: 32px; 
+    border-radius: 24px; 
     text-align: center;
     border: 1px solid rgba(255,255,255,0.1); 
-    border-top: 1px solid rgba(255,255,255,0.25);
-    border-left: 1px solid rgba(255,255,255,0.15);
-    box-shadow: 0 30px 60px -12px rgba(0,0,0,0.8), 0 0 40px rgba(245, 158, 11, 0.15);
-    width: 88%; 
-    max-width: 380px;
+    box-shadow: 0 25px 50px -12px rgba(0,0,0,0.8), 0 0 30px rgba(59, 130, 246, 0.15);
+    width: 90%; 
+    max-width: 420px;
     max-height: 90vh;
     overflow-y: auto;
     animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
     position: relative;
 }
 
@@ -245,9 +243,9 @@ canvas {
     content: '';
     position: absolute;
     top: 0; left: 0; right: 0; bottom: 0;
-    border-radius: 32px;
+    border-radius: 24px;
     padding: 1px;
-    background: linear-gradient(135deg, rgba(255,255,255,0.3), rgba(255,255,255,0) 40%, rgba(245,158,11,0.3));
+    background: linear-gradient(135deg, rgba(255,255,255,0.2), rgba(255,255,255,0) 40%, rgba(59, 130, 246, 0.2));
     -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
     -webkit-mask-composite: xor;
     mask-composite: exclude;
@@ -264,22 +262,22 @@ canvas {
 }
 
 .lobby-section {
-    background: rgba(0, 0, 0, 0.25);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 20px;
-    padding: 20px;
-    margin-bottom: 20px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 16px;
+    padding: 24px;
+    margin-bottom: 24px;
     text-align: left;
-    box-shadow: inset 0 2px 10px rgba(0,0,0,0.2);
+    box-shadow: inset 0 2px 10px rgba(0,0,0,0.1);
 }
 
 .section-title {
     margin: 0 0 16px 0;
-    font-size: 12px;
-    font-weight: 800;
-    color: rgba(255,255,255,0.6);
+    font-size: 13px;
+    font-weight: 700;
+    color: rgba(255,255,255,0.5);
     text-transform: uppercase;
-    letter-spacing: 2px;
+    letter-spacing: 1.5px;
 }
 
 .divider {
@@ -346,58 +344,63 @@ canvas {
 .lobby-btn {
     position: relative;
     overflow: hidden;
-    background: var(--text-main); 
-    color: var(--bg-darker); 
-    border: none; 
-    padding: clamp(14px, 4vw, 18px) clamp(16px, 5vw, 20px);
-    font-size: clamp(14px, 4vw, 16px); 
-    font-weight: 800; 
-    border-radius: 16px; 
+    background: rgba(255, 255, 255, 0.1); 
+    color: var(--text-main); 
+    border: 1px solid rgba(255, 255, 255, 0.2); 
+    padding: clamp(12px, 4vw, 16px) clamp(16px, 5vw, 20px);
+    font-size: clamp(14px, 4vw, 15px); 
+    font-weight: 700; 
+    border-radius: 12px; 
     cursor: pointer;
     margin: 8px 0; 
     width: 100%; 
-    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-    text-transform: uppercase;
-    letter-spacing: 1.5px;
-    box-shadow: inset 0 2px 4px rgba(255,255,255,0.3);
+    transition: all 0.2s ease;
+    letter-spacing: 1px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
 }
 
-.lobby-btn::after {
-    content: '';
-    position: absolute;
-    top: 0; left: -100%; width: 50%; height: 100%;
-    background: linear-gradient(to right, transparent, rgba(255,255,255,0.4), transparent);
-    transform: skewX(-20deg);
-    transition: left 0.5s ease;
+.lobby-btn:hover { 
+    transform: translateY(-1px); 
+    background: rgba(255, 255, 255, 0.15);
+    box-shadow: 0 6px 16px rgba(0,0,0,0.3); 
 }
-
-.lobby-btn:hover::after {
-    left: 150%;
+.lobby-btn:active { 
+    transform: translateY(1px); 
+    background: rgba(255, 255, 255, 0.05);
 }
-
-.lobby-btn:hover { transform: translateY(-2px) scale(1.02); filter: brightness(1.15); box-shadow: 0 10px 25px rgba(0,0,0,0.4); }
-.lobby-btn:active { transform: translateY(1px) scale(0.98); filter: brightness(0.9); }
 
 .lobby-btn.primary {
-    background: linear-gradient(135deg, var(--accent), #ea580c);
-    color: white;
-    box-shadow: 0 8px 20px rgba(245, 158, 11, 0.3);
+    background: var(--accent);
+    color: #000;
+    border: none;
+    box-shadow: 0 4px 15px rgba(245, 158, 11, 0.3);
 }
-.lobby-btn.primary:hover { box-shadow: 0 12px 25px rgba(245, 158, 11, 0.4); }
+.lobby-btn.primary:hover { 
+    background: var(--accent-hover);
+    box-shadow: 0 6px 20px rgba(245, 158, 11, 0.4); 
+}
 
 .lobby-btn.secondary {
-    background: linear-gradient(135deg, #3b82f6, #2563eb);
+    background: #3b82f6;
     color: white;
-    box-shadow: 0 8px 20px rgba(59, 130, 246, 0.3);
+    border: none;
+    box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
 }
-.lobby-btn.secondary:hover { box-shadow: 0 12px 25px rgba(59, 130, 246, 0.4); }
+.lobby-btn.secondary:hover { 
+    background: #2563eb;
+    box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4); 
+}
 
 .lobby-btn.success {
-    background: linear-gradient(135deg, #10b981, #059669);
+    background: #10b981;
     color: white;
-    box-shadow: 0 8px 20px rgba(16, 185, 129, 0.3);
+    border: none;
+    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
 }
-.lobby-btn.success:hover { box-shadow: 0 12px 25px rgba(16, 185, 129, 0.4); }
+.lobby-btn.success:hover { 
+    background: #059669;
+    box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4); 
+}
 
 .lobby-btn.outline {
     background: transparent;
@@ -409,41 +412,41 @@ canvas {
 .lobby-input {
     width: 100%; 
     box-sizing: border-box;
-    padding: clamp(14px, 4vw, 18px); 
-    border-radius: 16px; 
-    border: 2px solid rgba(255,255,255,0.08);
-    background: rgba(0,0,0,0.5);
+    padding: clamp(12px, 4vw, 16px); 
+    border-radius: 12px; 
+    border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(0,0,0,0.3);
     color: var(--text-main);
     margin: 10px 0 20px 0; 
     text-align: center; 
-    font-size: clamp(18px, 5vw, 22px); 
-    font-weight: 700;
+    font-size: clamp(16px, 5vw, 20px); 
+    font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 3px;
-    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    letter-spacing: 2px;
+    transition: all 0.2s ease;
     font-family: 'Outfit', sans-serif;
-    box-shadow: inset 0 2px 6px rgba(0,0,0,0.5);
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
 }
 
 .lobby-input:focus, .lobby-input:focus-within {
     outline: none;
-    border-color: rgba(59, 130, 246, 0.6);
-    background: rgba(0,0,0,0.7);
-    box-shadow: inset 0 2px 6px rgba(0,0,0,0.5), 0 0 15px rgba(59, 130, 246, 0.3);
+    border-color: rgba(59, 130, 246, 0.5);
+    background: rgba(0,0,0,0.5);
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.2), 0 0 10px rgba(59, 130, 246, 0.2);
 }
-.lobby-input::placeholder { color: rgba(255,255,255,0.2); font-weight: 500; letter-spacing: 1px; font-size: 16px;}
+.lobby-input::placeholder { color: rgba(255,255,255,0.3); font-weight: 500; letter-spacing: 1px; font-size: 14px;}
 
 #room-code-display { 
-    font-size: clamp(28px, 8vw, 42px); 
+    font-size: clamp(24px, 6vw, 36px); 
     color: var(--text-main); 
-    letter-spacing: clamp(4px, 2vw, 8px); 
-    margin: 25px 0; 
-    font-weight: 800;
-    background: rgba(0,0,0,0.4);
-    padding: clamp(12px, 4vw, 20px);
-    border-radius: 16px;
-    border: 1px solid rgba(255,255,255,0.1);
-    box-shadow: inset 0 4px 10px rgba(0,0,0,0.5);
+    letter-spacing: clamp(3px, 1.5vw, 6px); 
+    margin: 20px 0; 
+    font-weight: 700;
+    background: rgba(0,0,0,0.3);
+    padding: clamp(10px, 3vw, 16px);
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.05);
+    box-shadow: inset 0 2px 6px rgba(0,0,0,0.2);
 }
 
 /* Game Over Modal */
@@ -465,13 +468,13 @@ canvas {
 /* Segmented Control */
 .segmented-control-2 {
     display: flex;
-    background: rgba(0, 0, 0, 0.6);
-    border-radius: 16px;
-    padding: 4px;
+    background: rgba(0, 0, 0, 0.4);
+    border-radius: 12px;
+    padding: 6px;
     margin: 10px 0 20px 0;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.05);
     position: relative;
-    box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);
+    box-shadow: inset 0 2px 6px rgba(0,0,0,0.3);
 }
 
 .segmented-control-2 input {
@@ -483,29 +486,30 @@ canvas {
     padding: 12px;
     text-align: center;
     font-size: 14px;
-    font-weight: 700;
-    color: rgba(255, 255, 255, 0.8);
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.6);
     cursor: pointer;
-    transition: color 0.3s ease;
+    transition: all 0.3s ease;
     z-index: 1;
 }
 
 .segmented-control-2 input:checked + label {
     color: #ffffff;
-    text-shadow: 0 0 10px rgba(0,0,0,0.3);
+    font-weight: 700;
 }
 
 .pill-2 {
     position: absolute;
-    top: 4px;
-    bottom: 4px;
-    left: 4px;
-    width: calc((100% - 8px) / 2);
-    background: linear-gradient(135deg, var(--accent), #ea580c);
-    border-radius: 12px;
-    transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    top: 6px;
+    bottom: 6px;
+    left: 6px;
+    width: calc((100% - 12px) / 2);
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
     z-index: 0;
-    box-shadow: 0 4px 10px rgba(245, 158, 11, 0.4);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    border: 1px solid rgba(255,255,255,0.05);
 }
 
 #game-carrom:checked ~ .pill-2 { transform: translateX(0); }
@@ -569,9 +573,39 @@ canvas {
     to { transform: rotate(360deg); }
 }
 
-@keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
+.reconnect-toast {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    background: rgba(15, 23, 42, 0.9);
+    color: white;
+    padding: 12px 24px;
+    border-radius: 30px;
+    font-size: 14px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.1);
+    z-index: 9999;
+    opacity: 0;
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    backdrop-filter: blur(10px);
+}
+
+.reconnect-toast.show {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+}
+
+.reconnect-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255,255,255,0.2);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
 }
 
 select.lobby-input {

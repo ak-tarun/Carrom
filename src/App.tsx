@@ -4,6 +4,7 @@ import { initializeApp } from "firebase/app";
 import { getDatabase, ref, set, onValue, get, update, onDisconnect, push, remove, onChildAdded } from "firebase/database";
 import { Network } from '@capacitor/network';
 import { App as CapacitorApp } from '@capacitor/app';
+import { HelpCircle, Settings } from 'lucide-react';
 
 let initialized = false;
 
@@ -12,6 +13,8 @@ import ChessGame from './components/chess/ChessGame';
 export default function App() {
   const [showChess, setShowChess] = useState(false);
   const [chessConfig, setChessConfig] = useState({ roomCode: '', role: '' });
+  const [isReconnecting, setIsReconnecting] = useState(false);
+  const [reconnectMessage, setReconnectMessage] = useState('');
 
   useEffect(() => {
     if (initialized) return;
@@ -53,6 +56,7 @@ export default function App() {
         if (isConnected) {
             hasInitiallyConnected = true;
             reconnectAttempts = 0;
+            setIsReconnecting(false);
             if (reconnectTimeout) {
                 clearTimeout(reconnectTimeout);
                 reconnectTimeout = null;
@@ -65,29 +69,32 @@ export default function App() {
                 updatePresence(isGameRunning ? 'in-game' : 'online');
             }
         } else {
-            if (loader) {
-                loader.style.display = 'flex';
-                if (hasInitiallyConnected) {
-                    handleReconnect(loaderText);
-                } else {
+            if (hasInitiallyConnected) {
+                // Graceful reconnect UI
+                setIsReconnecting(true);
+                handleReconnect();
+            } else {
+                // Initial load blocking UI
+                if (loader) {
+                    loader.style.display = 'flex';
                     if (loaderText) loaderText.innerText = "Connecting to server...";
                 }
             }
         }
     });
 
-    function handleReconnect(loaderText) {
+    function handleReconnect() {
         if (reconnectAttempts > 5) {
-            if (loaderText) loaderText.innerText = "Connection failed. Please refresh the page.";
+            setReconnectMessage("Connection failed. Please refresh.");
             return;
         }
         
         const backoffTime = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000); // Max 30s
-        if (loaderText) loaderText.innerText = `Connection lost. Reconnecting in ${backoffTime/1000}s...`;
+        setReconnectMessage(`Connection lost. Reconnecting in ${backoffTime/1000}s...`);
         
         reconnectTimeout = setTimeout(() => {
             reconnectAttempts++;
-            if (loaderText) loaderText.innerText = "Attempting to reconnect...";
+            setReconnectMessage("Attempting to reconnect...");
             // Firebase handles the actual reconnection automatically, 
             // this is just for UI feedback and limiting attempts.
         }, backoffTime);
@@ -1803,10 +1810,15 @@ export default function App() {
 
   return (
     <>
-      <div id="connection-loader" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(9, 9, 11, 0.95)', zIndex: 9999, backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)' }}>
+      <div id="connection-loader" style={{ display: 'none', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(9, 9, 11, 0.95)', zIndex: 9999, backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)' }}>
           <div className="spinner" style={{ width: '40px', height: '40px', border: '4px solid rgba(255,255,255,0.1)', borderTopColor: 'var(--accent)', borderRadius: '50%', animation: 'spin 1s linear infinite', marginBottom: '15px' }}></div>
           <p id="connection-text" style={{ color: 'var(--text-main)', fontSize: '16px', fontWeight: 600, letterSpacing: '0.5px' }}>Connecting to server...</p>
           <button id="btn-offline-anyway" style={{ marginTop: '20px', background: 'transparent', border: '1px solid var(--text-muted)', color: 'var(--text-muted)', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer' }} onClick={() => { document.getElementById('connection-loader').style.display = 'none'; }}>Play Offline Anyway</button>
+      </div>
+
+      <div className={`reconnect-toast ${isReconnecting ? 'show' : ''}`}>
+          <div className="reconnect-spinner"></div>
+          <span>{reconnectMessage}</span>
       </div>
 
       <div id="network-status" style={{ display: 'none', background: '#ef4444', color: 'white', textAlign: 'center', padding: '8px', paddingTop: 'calc(8px + env(safe-area-inset-top))', position: 'fixed', top: 0, left: 0, width: '100%', zIndex: 1000, fontSize: '12px', fontWeight: 'bold', letterSpacing: '1px' }}>
@@ -1820,9 +1832,20 @@ export default function App() {
 
       <div id="lobby">
           <div className="lobby-panel" id="panel-main" style={{ position: 'relative' }}>
-              <button id="btn-rules" style={{ position: 'absolute', top: '20px', right: '60px', background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '20px' }}>❓</button>
-              <button id="btn-settings" style={{ position: 'absolute', top: '20px', right: '20px', background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '20px' }}>⚙️</button>
-              <h1 style={{fontSize: '32px', fontWeight: 900, margin: '0 0 20px 0', color: 'var(--accent)', letterSpacing: '2px', textTransform: 'uppercase'}}>Carrom</h1>
+              <button id="btn-rules" style={{ position: 'absolute', top: '24px', right: '64px', background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', transition: 'color 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onMouseOver={(e) => e.currentTarget.style.color = 'var(--text-main)'} onMouseOut={(e) => e.currentTarget.style.color = 'var(--text-muted)'}>
+                  <HelpCircle size={22} />
+              </button>
+              <button id="btn-settings" style={{ position: 'absolute', top: '24px', right: '24px', background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', transition: 'color 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onMouseOver={(e) => e.currentTarget.style.color = 'var(--text-main)'} onMouseOut={(e) => e.currentTarget.style.color = 'var(--text-muted)'}>
+                  <Settings size={22} />
+              </button>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '24px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <h1 style={{fontSize: '36px', fontWeight: 900, margin: '0', color: 'var(--text-main)', letterSpacing: '1px', textShadow: '0 2px 10px rgba(0,0,0,0.5)'}}>Multi<span style={{color: 'var(--accent)'}}>Game</span></h1>
+                      <span style={{ background: 'rgba(245, 158, 11, 0.2)', color: 'var(--accent)', padding: '4px 8px', borderRadius: '8px', fontSize: '12px', fontWeight: 800, border: '1px solid rgba(245, 158, 11, 0.4)' }}>v2.0</span>
+                  </div>
+                  <p style={{ margin: '8px 0 0 0', color: 'var(--text-muted)', fontSize: '14px', fontWeight: 500 }}>Play Carrom & Chess Online</p>
+              </div>
               
               <div className="lobby-section">
                   <h3 className="section-title">Select Game</h3>
@@ -1942,12 +1965,21 @@ export default function App() {
                       <li>The longer you drag, the more power your shot will have.</li>
                   </ul>
 
-                  <h3 style={{ color: 'var(--text-main)', marginBottom: '10px' }}>Rules</h3>
+                  <h3 style={{ color: 'var(--text-main)', marginBottom: '10px' }}>Carrom Rules</h3>
                   <ul style={{ paddingLeft: '20px', marginBottom: '20px' }}>
                       <li><strong>Objective:</strong> Pocket all your coins (White for Host, Black for Guest) before your opponent.</li>
                       <li><strong>The Queen (Red):</strong> Must be pocketed before your last coin. If you pocket the Queen, you must pocket one of your own coins on the very next shot to "cover" it. If you fail, the Queen is returned to the center.</li>
                       <li><strong>Fouls:</strong> Pocketing the striker is a foul. A foul results in one of your pocketed coins being returned to the board, and you lose your turn.</li>
                       <li><strong>Turns:</strong> You get another turn if you successfully pocket one of your own coins.</li>
+                  </ul>
+
+                  <h3 style={{ color: 'var(--text-main)', marginBottom: '10px' }}>Chess Rules</h3>
+                  <ul style={{ paddingLeft: '20px', marginBottom: '20px' }}>
+                      <li><strong>Objective:</strong> Checkmate the opponent's king.</li>
+                      <li><strong>Movement:</strong> Click a piece to see valid moves, then click a highlighted square to move.</li>
+                      <li><strong>Castling:</strong> Move the King two squares towards the Rook. The Rook will automatically jump over.</li>
+                      <li><strong>En Passant:</strong> If a pawn moves two squares forward and lands beside an opponent's pawn, the opponent can capture it diagonally on the next turn.</li>
+                      <li><strong>Promotion:</strong> When a pawn reaches the opposite end of the board, it can be promoted to a Queen, Rook, Bishop, or Knight.</li>
                   </ul>
               </div>
 

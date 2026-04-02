@@ -1,23 +1,24 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Chess } from 'chess.js';
 import { User, Bot } from 'lucide-react';
+import { PIECES_SVG } from './pieces';
 
 const PIECE_IMAGES = {
   w: {
-    p: 'https://images.chesscomfiles.com/chess-themes/pieces/neo/150/wp.png',
-    n: 'https://images.chesscomfiles.com/chess-themes/pieces/neo/150/wn.png',
-    b: 'https://images.chesscomfiles.com/chess-themes/pieces/neo/150/wb.png',
-    r: 'https://images.chesscomfiles.com/chess-themes/pieces/neo/150/wr.png',
-    q: 'https://images.chesscomfiles.com/chess-themes/pieces/neo/150/wq.png',
-    k: 'https://images.chesscomfiles.com/chess-themes/pieces/neo/150/wk.png'
+    p: `data:image/svg+xml;utf8,${encodeURIComponent(PIECES_SVG.w.p)}`,
+    n: `data:image/svg+xml;utf8,${encodeURIComponent(PIECES_SVG.w.n)}`,
+    b: `data:image/svg+xml;utf8,${encodeURIComponent(PIECES_SVG.w.b)}`,
+    r: `data:image/svg+xml;utf8,${encodeURIComponent(PIECES_SVG.w.r)}`,
+    q: `data:image/svg+xml;utf8,${encodeURIComponent(PIECES_SVG.w.q)}`,
+    k: `data:image/svg+xml;utf8,${encodeURIComponent(PIECES_SVG.w.k)}`
   },
   b: {
-    p: 'https://images.chesscomfiles.com/chess-themes/pieces/neo/150/bp.png',
-    n: 'https://images.chesscomfiles.com/chess-themes/pieces/neo/150/bn.png',
-    b: 'https://images.chesscomfiles.com/chess-themes/pieces/neo/150/bb.png',
-    r: 'https://images.chesscomfiles.com/chess-themes/pieces/neo/150/br.png',
-    q: 'https://images.chesscomfiles.com/chess-themes/pieces/neo/150/bq.png',
-    k: 'https://images.chesscomfiles.com/chess-themes/pieces/neo/150/bk.png'
+    p: `data:image/svg+xml;utf8,${encodeURIComponent(PIECES_SVG.b.p)}`,
+    n: `data:image/svg+xml;utf8,${encodeURIComponent(PIECES_SVG.b.n)}`,
+    b: `data:image/svg+xml;utf8,${encodeURIComponent(PIECES_SVG.b.b)}`,
+    r: `data:image/svg+xml;utf8,${encodeURIComponent(PIECES_SVG.b.r)}`,
+    q: `data:image/svg+xml;utf8,${encodeURIComponent(PIECES_SVG.b.q)}`,
+    k: `data:image/svg+xml;utf8,${encodeURIComponent(PIECES_SVG.b.k)}`
   }
 };
 
@@ -53,10 +54,13 @@ export default function ChessBoard({ fen, role, aiDifficulty, onMove, onGameOver
     } catch (e) {
       console.error("Invalid FEN received:", fen);
     }
-  }, [fen, game, lastMove]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fen, lastMove]);
 
   // Check for game over conditions
   useEffect(() => {
+    if (status !== 'active') return;
+
     if (game.isCheckmate()) {
       checkmateSoundRef.current?.play().catch(e => console.warn("Audio play failed", e));
       onGameOver('checkmate');
@@ -64,7 +68,8 @@ export default function ChessBoard({ fen, role, aiDifficulty, onMove, onGameOver
       drawSoundRef.current?.play().catch(e => console.warn("Audio play failed", e));
       onGameOver('draw');
     }
-  }, [game.fen(), onGameOver]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [game.fen(), status]);
 
   const executeMove = (sanMove) => {
     try {
@@ -212,6 +217,9 @@ export default function ChessBoard({ fen, role, aiDifficulty, onMove, onGameOver
             const isLastMove = lastMove && (lastMove.from === square || lastMove.to === square);
             const isCheck = piece && piece.type === 'k' && piece.color === game.turn() && game.inCheck();
 
+            const showRank = colIndex === 0;
+            const showFile = rowIndex === 7;
+
             let squareClass = `chess-square ${isLight ? 'light' : 'dark'}`;
             if (isSelected) squareClass += ' selected';
             if (isValidMove) squareClass += ' valid-move';
@@ -225,6 +233,8 @@ export default function ChessBoard({ fen, role, aiDifficulty, onMove, onGameOver
                 onClick={() => handleSquareClick(square)}
                 data-square={square}
               >
+                {showRank && <span className="coordinate rank-coord">{displayRanks[rowIndex]}</span>}
+                {showFile && <span className="coordinate file-coord">{displayFiles[colIndex]}</span>}
                 {isValidMove && !piece && <div className="move-hint"></div>}
                 {isValidMove && piece && <div className="capture-hint"></div>}
                 {piece && (
@@ -234,7 +244,6 @@ export default function ChessBoard({ fen, role, aiDifficulty, onMove, onGameOver
                       alt={`${piece.color} ${piece.type}`} 
                       className="chess-piece-img" 
                       draggable="false" 
-                      referrerPolicy="no-referrer"
                     />
                   </div>
                 )}
@@ -305,7 +314,6 @@ export default function ChessBoard({ fen, role, aiDifficulty, onMove, onGameOver
                       alt={`${pColor} ${p}`} 
                       className="chess-piece-img" 
                       draggable="false" 
-                      referrerPolicy="no-referrer"
                     />
                   </button>
                 )})}

@@ -80,7 +80,8 @@ export default function ChessGame({ roomCode, role, aiDifficulty }) {
         status: 'active'
       });
     }
-  }, [roomCode, role, db, aiDifficulty]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomCode, role, aiDifficulty]);
 
   const handleMove = (newFen, moveInfo) => {
     const newState = {

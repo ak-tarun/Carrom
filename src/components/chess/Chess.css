@@ -224,23 +224,46 @@
   box-shadow: inset 0 0 20px rgba(239, 68, 68, 0.9);
 }
 
+.chess-square.valid-move {
+  cursor: pointer;
+}
+
+.chess-square.valid-move:hover::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.1);
+  z-index: 1;
+}
+
 .move-hint {
-  width: 25%;
-  height: 25%;
-  background-color: rgba(0, 0, 0, 0.25);
+  position: absolute;
+  width: 30%;
+  height: 30%;
+  background-color: rgba(0, 0, 0, 0.2);
   border-radius: 50%;
   pointer-events: none;
-  box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);
+  z-index: 2;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
 }
 
 .capture-hint {
   position: absolute;
   width: 90%;
   height: 90%;
-  border: 5px solid rgba(0, 0, 0, 0.25);
+  border: 6px solid rgba(0, 0, 0, 0.2);
   border-radius: 50%;
   box-sizing: border-box;
   pointer-events: none;
+  z-index: 5;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
 }
 
 .chess-piece {

@@ -37,13 +37,20 @@ export default function CommsPanel({ roomCode, role, db }) {
     if (!roomCode) return;
 
     const initPeer = async () => {
+      let stream: MediaStream | undefined;
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         localStreamRef.current = stream;
         
         // Mute initially
         stream.getAudioTracks().forEach(track => track.enabled = false);
+      } catch (err) {
+        console.warn("Microphone access denied or unavailable. Voice chat will be disabled.", err);
+        // Continue without stream so text chat and other features aren't blocked,
+        // though PeerJS is primarily used for voice here.
+      }
 
+      try {
         const myId = `${roomCode}-${role}`;
         const theirId = `${roomCode}-${role === 'host' ? 'guest' : 'host'}`;
         
@@ -65,9 +72,9 @@ export default function CommsPanel({ roomCode, role, db }) {
           console.log('My peer ID is: ' + id);
           
           // If guest, call host
-          if (role === 'guest') {
+          if (role === 'guest' && stream) {
             setTimeout(() => {
-              const call = peer.call(theirId, stream);
+              const call = peer.call(theirId, stream!);
               if (call) {
                 call.on('stream', (remoteStream) => {
                   if (audioRef.current) {
@@ -80,7 +87,12 @@ export default function CommsPanel({ roomCode, role, db }) {
         });
 
         peer.on('call', (call) => {
-          call.answer(stream);
+          if (stream) {
+            call.answer(stream);
+          } else {
+            // Answer without a stream if we don't have one
+            call.answer();
+          }
           call.on('stream', (remoteStream) => {
             if (audioRef.current) {
               audioRef.current.srcObject = remoteStream;
@@ -89,7 +101,7 @@ export default function CommsPanel({ roomCode, role, db }) {
         });
 
       } catch (err) {
-        console.error("Failed to get local stream", err);
+        console.error("Failed to initialize PeerJS", err);
       }
     };
 

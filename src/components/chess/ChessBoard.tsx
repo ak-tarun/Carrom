@@ -244,8 +244,8 @@ export default function ChessBoard({ fen, role, aiDifficulty, onMove, onGameOver
     );
   };
 
-  const topPlayer = role === 'guest' ? players?.host : players?.guest;
-  const bottomPlayer = role === 'guest' ? players?.guest : players?.host;
+  const topPlayer = players ? (role === 'guest' ? players.host : players.guest) : 'Opponent';
+  const bottomPlayer = players ? (role === 'guest' ? players.guest : players.host) : 'You';
 
   return (
     <div className="chess-board-container">

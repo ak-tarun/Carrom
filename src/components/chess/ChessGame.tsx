@@ -37,58 +37,74 @@ export default function ChessGame({ roomCode, role, aiDifficulty }) {
           setPlayers({ host: hostName, guest: guestName });
         }
       });
+
+      const roomStateRef = ref(db, `rooms/${roomCode}/chessState`);
+      
+      // Set up disconnect handler to secure the room
+      const disconnectRef = onDisconnect(roomStateRef);
+      if (role === 'host') {
+        disconnectRef.update({ hostDisconnected: true });
+      } else if (role === 'guest') {
+        disconnectRef.update({ guestDisconnected: true });
+      }
+
+      const unsubscribe = onValue(roomStateRef, (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+          setGameState(data);
+        } else if (role === 'host') {
+          // Initialize game state for host
+          const initialState = {
+            fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+            turn: 'w',
+            lastMove: null,
+            status: 'active'
+          };
+          set(roomStateRef, initialState);
+        }
+      }, (err) => {
+        console.error("Firebase error:", err);
+        setError("Failed to sync game state.");
+      });
+
+      return () => {
+        unsubscribe();
+        disconnectRef.cancel();
+      };
     } else {
       setPlayers({ host: 'You', guest: aiDifficulty ? `AI (${aiDifficulty})` : 'Guest' });
+      setGameState({
+        fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        turn: 'w',
+        lastMove: null,
+        status: 'active'
+      });
     }
-
-    const roomStateRef = ref(db, `rooms/${roomCode}/chessState`);
-    
-    // Set up disconnect handler to secure the room
-    const disconnectRef = onDisconnect(roomStateRef);
-    if (role === 'host') {
-      disconnectRef.update({ hostDisconnected: true });
-    } else if (role === 'guest') {
-      disconnectRef.update({ guestDisconnected: true });
-    }
-
-    const unsubscribe = onValue(roomStateRef, (snapshot) => {
-      const data = snapshot.val();
-      if (data) {
-        setGameState(data);
-      } else if (role === 'host' || role === 'local') {
-        // Initialize game state for host or local
-        const initialState = {
-          fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
-          turn: 'w',
-          lastMove: null,
-          status: 'active'
-        };
-        set(roomStateRef, initialState);
-      }
-    }, (err) => {
-      console.error("Firebase error:", err);
-      setError("Failed to sync game state.");
-    });
-
-    return () => {
-      unsubscribe();
-      disconnectRef.cancel();
-    };
   }, [roomCode, role, db, aiDifficulty]);
 
   const handleMove = (newFen, moveInfo) => {
-    const roomRef = ref(db, `rooms/${roomCode}/chessState`);
-    set(roomRef, {
+    const newState = {
       fen: newFen,
       turn: newFen.split(' ')[1],
       lastMove: moveInfo,
       status: 'active'
-    });
+    };
+    
+    if (role === 'local') {
+      setGameState(newState);
+    } else {
+      const roomRef = ref(db, `rooms/${roomCode}/chessState`);
+      set(roomRef, newState);
+    }
   };
 
   const handleGameOver = (status) => {
-    const roomRef = ref(db, `rooms/${roomCode}/chessState/status`);
-    set(roomRef, status);
+    if (role === 'local') {
+      setGameState(prev => prev ? { ...prev, status } : null);
+    } else {
+      const roomRef = ref(db, `rooms/${roomCode}/chessState/status`);
+      set(roomRef, status);
+    }
   };
 
   return (

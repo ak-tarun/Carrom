@@ -503,7 +503,7 @@ canvas {
     top: 6px;
     bottom: 6px;
     left: 6px;
-    width: calc((100% - 12px) / 2);
+    width: calc((100% - 12px) / 4);
     background: rgba(255, 255, 255, 0.1);
     border-radius: 8px;
     transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
@@ -514,6 +514,8 @@ canvas {
 
 #game-carrom:checked ~ .pill-2 { transform: translateX(0); }
 #game-chess:checked ~ .pill-2 { transform: translateX(100%); }
+#game-tictactoe:checked ~ .pill-2 { transform: translateX(200%); }
+#game-ludo:checked ~ .pill-2 { transform: translateX(300%); }
 
 .segmented-control {
     display: flex;

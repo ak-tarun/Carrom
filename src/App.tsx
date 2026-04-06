@@ -9,10 +9,12 @@ import { HelpCircle, Settings } from 'lucide-react';
 let initialized = false;
 
 import ChessGame from './components/chess/ChessGame';
+import TicTacToeGame from './components/tictactoe/TicTacToeGame';
+import LudoGame from './components/ludo/LudoGame';
 
 export default function App() {
-  const [showChess, setShowChess] = useState(false);
-  const [chessConfig, setChessConfig] = useState({ roomCode: '', role: '' });
+  const [activeGame, setActiveGame] = useState(null);
+  const [gameConfig, setGameConfig] = useState({ roomCode: '', role: '', aiDifficulty: '' });
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [reconnectMessage, setReconnectMessage] = useState('');
 
@@ -253,12 +255,13 @@ export default function App() {
                 gameMode = 'multi';
                 await update(ref(db, `rooms/${currentRoom}`), { status: 'playing', guestId: myUserId });
                 
-                if (invite.game === 'chess') {
-                    setChessConfig({ roomCode: currentRoom, role: 'guest' });
-                    setShowChess(true);
+                if (invite.game === 'chess' || invite.game === 'tictactoe' || invite.game === 'ludo') {
+                    setGameConfig({ roomCode: currentRoom, role: 'guest' });
+                    setActiveGame(invite.game);
                     document.getElementById('lobby').style.display = 'none';
                     document.getElementById('carrom-ui').style.display = 'none';
                 } else {
+                    setActiveGame('carrom');
                     startGame();
                 }
             };
@@ -305,12 +308,13 @@ export default function App() {
             const inviteListener = onValue(ref(db, `invites/${targetUserId}`), (snapshot) => {
                 const invite = snapshot.val();
                 if (invite && invite.status === 'accepted') {
-                    if (selectedGame === 'chess') {
-                        setChessConfig({ roomCode: code, role: 'host' });
-                        setShowChess(true);
+                    if (selectedGame === 'chess' || selectedGame === 'tictactoe' || selectedGame === 'ludo') {
+                        setGameConfig({ roomCode: code, role: 'host' });
+                        setActiveGame(selectedGame);
                         document.getElementById('lobby').style.display = 'none';
                         document.getElementById('carrom-ui').style.display = 'none';
                     } else {
+                        setActiveGame('carrom');
                         startGame();
                     }
                     // Clean up listener (simplified for this context)
@@ -332,12 +336,13 @@ export default function App() {
             // Also listen for normal room join just in case
             onValue(ref(db, `rooms/${code}/status`), (snapshot) => {
                 if(snapshot.val() === 'playing' && !isGameRunning) {
-                    if (selectedGame === 'chess') {
-                        setChessConfig({ roomCode: code, role: 'host' });
-                        setShowChess(true);
+                    if (selectedGame === 'chess' || selectedGame === 'tictactoe' || selectedGame === 'ludo') {
+                        setGameConfig({ roomCode: code, role: 'host' });
+                        setActiveGame(selectedGame);
                         document.getElementById('lobby').style.display = 'none';
                         document.getElementById('carrom-ui').style.display = 'none';
                     } else {
+                        setActiveGame('carrom');
                         startGame();
                     }
                 }
@@ -366,8 +371,10 @@ export default function App() {
     }
 
     function initAudio() {
+        if(audioCtx.state === 'suspended') {
+            audioCtx.resume().catch(e => console.error(e));
+        }
         if(audioReady) return;
-        if(audioCtx.state === 'suspended') audioCtx.resume();
         
         let bufferSize = audioCtx.sampleRate * 0.1;
         noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
@@ -382,6 +389,7 @@ export default function App() {
 
     function playPhysicalImpact(baseFreq, modes, duration, vol) {
         if(!audioReady || !noiseBuffer) return;
+        if(audioCtx.state === 'suspended') audioCtx.resume();
         let t = audioCtx.currentTime;
         
         let noiseSrc = audioCtx.createBufferSource();
@@ -411,33 +419,35 @@ export default function App() {
 
     const sounds = {
         playHit: function(impulse) {
-            let vol = Math.min(1, impulse / 15) * 0.8;
-            if(vol < 0.05) return;
+            let vol = Math.min(1, impulse / 5) * 1.5;
+            if(vol < 0.01) return;
             playPhysicalImpact(1100, [ {f: 1.0, a: 1.0, d: 1.0}, {f: 1.8, a: 0.6, d: 0.7}, {f: 2.5, a: 0.4, d: 0.4}, {f: 3.8, a: 0.2, d: 0.2} ], 0.035, vol);
         },
         playWall: function(vel) {
-            let vol = Math.min(1, Math.abs(vel) / 15) * 1.0;
-            if(vol < 0.05) return;
+            let vol = Math.min(1, Math.abs(vel) / 5) * 1.5;
+            if(vol < 0.01) return;
             playPhysicalImpact(220, [ {f: 1.0, a: 1.0, d: 1.0}, {f: 1.7, a: 0.7, d: 0.8}, {f: 2.6, a: 0.4, d: 0.5} ], 0.09, vol);
         },
         playPocket: function() {
             if(!audioReady) return;
+            if(audioCtx.state === 'suspended') audioCtx.resume();
             for(let i=0; i<3; i++) {
                 setTimeout(() => {
-                    let vol = 0.6 - (i * 0.15);
+                    let vol = 1.0 - (i * 0.15);
                     playPhysicalImpact(450 + (Math.random()*100), [ {f: 1.0, a: 1.0, d: 1.0}, {f: 2.1, a: 0.5, d: 0.6} ], 0.04, vol);
                 }, i * 45 + (Math.random() * 15));
             }
         },
         playFoul: function() {
             if(!audioReady) return;
+            if(audioCtx.state === 'suspended') audioCtx.resume();
             let t = audioCtx.currentTime;
             let osc = audioCtx.createOscillator();
             let gain = audioCtx.createGain();
             osc.type = 'triangle';
             osc.frequency.setValueAtTime(120, t);
             osc.frequency.exponentialRampToValueAtTime(40, t + 0.2);
-            gain.gain.setValueAtTime(0.8, t);
+            gain.gain.setValueAtTime(1.0, t);
             gain.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
             osc.connect(gain).connect(audioCtx.destination);
             osc.start(t); osc.stop(t + 0.25);
@@ -1159,14 +1169,15 @@ export default function App() {
     document.getElementById('btn-single').addEventListener('click', () => {
         initAudio();
         const selectedGame = document.querySelector('input[name="game-select"]:checked').value;
-        if (selectedGame === 'chess') {
+        if (selectedGame === 'chess' || selectedGame === 'tictactoe' || selectedGame === 'ludo') {
             const localCode = 'local_' + Math.random().toString(36).substring(2, 8);
             const difficulty = document.querySelector('input[name="difficulty"]:checked').value;
-            setChessConfig({ roomCode: localCode, role: 'local', aiDifficulty: difficulty });
-            setShowChess(true);
+            setGameConfig({ roomCode: localCode, role: 'local', aiDifficulty: difficulty });
+            setActiveGame(selectedGame);
             document.getElementById('lobby').style.display = 'none';
             document.getElementById('carrom-ui').style.display = 'none';
         } else {
+            setActiveGame('carrom');
             gameMode = 'single';
             aiDifficulty = document.querySelector('input[name="difficulty"]:checked').value;
             myRole = 'host';
@@ -1514,12 +1525,13 @@ export default function App() {
 
             onValue(ref(db, `rooms/${code}/status`), (snapshot) => {
                 if(snapshot.val() === 'playing') {
-                    if (selectedGame === 'chess') {
-                        setChessConfig({ roomCode: code, role: 'host' });
-                        setShowChess(true);
+                    if (selectedGame === 'chess' || selectedGame === 'tictactoe' || selectedGame === 'ludo') {
+                        setGameConfig({ roomCode: code, role: 'host' });
+                        setActiveGame(selectedGame);
                         document.getElementById('lobby').style.display = 'none';
                         document.getElementById('carrom-ui').style.display = 'none';
                     } else {
+                        setActiveGame('carrom');
                         startGame();
                     }
                 }
@@ -1559,12 +1571,13 @@ export default function App() {
                 const gameType = snapshot.val().game || 'carrom';
                 await update(roomRef, { status: 'playing', guestId: myUserId });
                 
-                if (gameType === 'chess') {
-                    setChessConfig({ roomCode: code, role: 'guest' });
-                    setShowChess(true);
+                if (gameType === 'chess' || gameType === 'tictactoe' || gameType === 'ludo') {
+                    setGameConfig({ roomCode: code, role: 'guest' });
+                    setActiveGame(gameType);
                     document.getElementById('lobby').style.display = 'none';
                     document.getElementById('carrom-ui').style.display = 'none';
                 } else {
+                    setActiveGame('carrom');
                     startGame();
                 }
             } else {
@@ -1854,6 +1867,10 @@ export default function App() {
                       <label htmlFor="game-carrom">Carrom</label>
                       <input type="radio" id="game-chess" name="game-select" value="chess" />
                       <label htmlFor="game-chess">Chess</label>
+                      <input type="radio" id="game-tictactoe" name="game-select" value="tictactoe" />
+                      <label htmlFor="game-tictactoe">Tic Tac Toe</label>
+                      <input type="radio" id="game-ludo" name="game-select" value="ludo" />
+                      <label htmlFor="game-ludo">Ludo</label>
                       <div className="pill-2"></div>
                   </div>
               </div>
@@ -1998,7 +2015,7 @@ export default function App() {
           </div>
       </div>
 
-      <div id="carrom-ui" style={{ display: showChess ? 'none' : 'block' }}>
+      <div id="carrom-ui" style={{ display: activeGame && activeGame !== 'carrom' ? 'none' : 'block' }}>
           <div className="header">
               <div className="score-box user-box">
                   <div style={{display: 'flex', alignItems: 'center', gap: '5px', justifyContent: 'center', marginBottom: '5px'}}>
@@ -2048,7 +2065,9 @@ export default function App() {
           </div>
       </div>
 
-      {showChess && <ChessGame roomCode={chessConfig.roomCode} role={chessConfig.role} aiDifficulty={chessConfig.aiDifficulty} />}
+      {activeGame === 'chess' && <ChessGame roomCode={gameConfig.roomCode} role={gameConfig.role} aiDifficulty={gameConfig.aiDifficulty} />}
+      {activeGame === 'tictactoe' && <TicTacToeGame roomCode={gameConfig.roomCode} role={gameConfig.role} aiDifficulty={gameConfig.aiDifficulty} />}
+      {activeGame === 'ludo' && <LudoGame roomCode={gameConfig.roomCode} role={gameConfig.role} aiDifficulty={gameConfig.aiDifficulty} />}
     </>
   );
 }

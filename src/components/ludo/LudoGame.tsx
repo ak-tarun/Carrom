@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { getDatabase, ref, onValue, set, onDisconnect, get } from 'firebase/database';
 import LudoBoard from './LudoBoard';
 import CommsPanel from '../chess/CommsPanel';
+import { playDiceRollSound, playWinSound } from '../../utils/sounds';
 import './Ludo.css';
 
 export default function LudoGame({ roomCode, role, aiDifficulty }) {
@@ -102,6 +103,7 @@ export default function LudoGame({ roomCode, role, aiDifficulty }) {
   const rollDice = () => {
     if (gameState.diceRolled || gameState.status !== 'active') return;
     
+    playDiceRollSound();
     const val = Math.floor(Math.random() * 6) + 1;
     
     // Check if any moves are possible
@@ -165,8 +167,8 @@ export default function LudoGame({ roomCode, role, aiDifficulty }) {
       } else if (color === 'blue') {
         if (currentPos <= 24 && currentPos >= 19 && newPos > 24) {
           newPos = 200 + (newPos - 25); // 200, 201, 202, 203, 204, 205 (Home)
-        } else if (newPos > 51) {
-          newPos = newPos - 52; // Wrap around
+        } else if (currentPos <= 51 && newPos > 51) {
+          newPos = newPos - 52; // Wrap around only if it was on the main track
         }
       }
     }
@@ -199,6 +201,10 @@ export default function LudoGame({ roomCode, role, aiDifficulty }) {
 
     // Check win
     const hasWon = newTokens[color].every(p => (color === 'red' ? p === 105 : p === 205));
+    
+    if (hasWon) {
+      playWinSound();
+    }
     
     let nextTurn = color;
     if (val !== 6 && !captured) {

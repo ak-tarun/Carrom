@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { playMoveSound, playCaptureSound, playHomeSound, initSounds } from '../../utils/sounds';
 
 export default function LudoBoard({ gameState, role, aiDifficulty, onRoll, onMove, players, onReset }) {
   const { tokens, turn, diceValue, diceRolled, status, winner } = gameState;
@@ -43,6 +44,7 @@ export default function LudoBoard({ gameState, role, aiDifficulty, onRoll, onMov
         });
 
         if (changed) {
+          playMoveSound();
           timeoutId = setTimeout(animateSteps, 250);
         }
         return changed ? nextTokens : prev;
@@ -64,9 +66,11 @@ export default function LudoBoard({ gameState, role, aiDifficulty, onRoll, onMov
         if (prevPos > -1 && pos === -1) {
           newAnimating[`${color}-${idx}`] = 'captured';
           changed = true;
+          playCaptureSound();
         } else if (prevPos !== pos && ((color === 'red' && pos === 105) || (color === 'blue' && pos === 205))) {
           newAnimating[`${color}-${idx}`] = 'home';
           changed = true;
+          playHomeSound();
         }
       });
     });
@@ -112,7 +116,7 @@ export default function LudoBoard({ gameState, role, aiDifficulty, onRoll, onMov
               let newPos = pos + val;
               if (pos <= 24 && pos >= 19 && newPos > 24) {
                 newPos = 200 + (newPos - 25);
-              } else if (newPos > 51 && pos < 100) {
+              } else if (pos <= 51 && newPos > 51) {
                 newPos = newPos - 52;
               }
               if (newPos <= 205) {
@@ -143,6 +147,7 @@ export default function LudoBoard({ gameState, role, aiDifficulty, onRoll, onMov
   }, [diceRolled, diceValue]);
 
   const handleRoll = () => {
+    initSounds();
     if (!isRolling) {
       onRoll();
     }
@@ -247,7 +252,10 @@ export default function LudoBoard({ gameState, role, aiDifficulty, onRoll, onMov
           key={`${color}-${idx}`}
           className={`ludo-token ${color} ${isMyTurn() && turn === color ? 'clickable' : ''} ${animClass}`}
           style={style}
-          onClick={() => onMove(color, idx)}
+          onClick={() => {
+            initSounds();
+            onMove(color, idx);
+          }}
         />
       );
     });
@@ -351,7 +359,7 @@ export default function LudoBoard({ gameState, role, aiDifficulty, onRoll, onMov
           </div>
           <div className="ludo-action-container">
             {isMyTurn() && !diceRolled && status === 'active' && (
-              <button className="ludo-roll-btn" onClick={handleRoll}>Roll Dice</button>
+              <button className="ludo-roll-btn" onClick={handleRoll}>Roll</button>
             )}
             {(!isMyTurn() || diceRolled) && status === 'active' && (
               <div className="ludo-turn-text">{turn}'s Turn</div>

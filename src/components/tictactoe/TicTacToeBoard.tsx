@@ -1,8 +1,15 @@
 import React, { useEffect, useState } from 'react';
+import { playMoveSound, playWinSound } from '../../utils/sounds';
 
 export default function TicTacToeBoard({ gameState, role, aiDifficulty, onMove, players, onReset }) {
   const { board, turn, status, winner, winningLine } = gameState;
   const [aiThinking, setAiThinking] = useState(false);
+
+  useEffect(() => {
+    if (status === 'gameover' && winner !== 'draw') {
+      playWinSound();
+    }
+  }, [status, winner]);
 
   const isMyTurn = () => {
     if (status !== 'active') return false;
@@ -12,6 +19,7 @@ export default function TicTacToeBoard({ gameState, role, aiDifficulty, onMove, 
 
   const handleSquareClick = (index) => {
     if (isMyTurn() && !board[index]) {
+      playMoveSound();
       onMove(index);
     }
   };

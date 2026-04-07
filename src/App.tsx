@@ -11,6 +11,7 @@ let initialized = false;
 import ChessGame from './components/chess/ChessGame';
 import TicTacToeGame from './components/tictactoe/TicTacToeGame';
 import LudoGame from './components/ludo/LudoGame';
+import { initSounds } from './utils/sounds';
 
 export default function App() {
   const [activeGame, setActiveGame] = useState(null);
@@ -371,6 +372,7 @@ export default function App() {
     }
 
     function initAudio() {
+        initSounds();
         if(audioCtx.state === 'suspended') {
             audioCtx.resume().catch(e => console.error(e));
         }
@@ -387,70 +389,117 @@ export default function App() {
         audioReady = true;
     }
 
-    function playPhysicalImpact(baseFreq, modes, duration, vol) {
-        if(!audioReady || !noiseBuffer) return;
+    function playWoodClack(vol) {
+        if(!audioReady) return;
         if(audioCtx.state === 'suspended') audioCtx.resume();
         let t = audioCtx.currentTime;
         
-        let noiseSrc = audioCtx.createBufferSource();
-        noiseSrc.buffer = noiseBuffer;
-        let noiseFilter = audioCtx.createBiquadFilter();
-        noiseFilter.type = 'bandpass';
-        noiseFilter.frequency.value = baseFreq * 1.5;
-        noiseFilter.Q.value = 0.5;
-        let noiseGain = audioCtx.createGain();
-        noiseGain.gain.setValueAtTime(vol * 2.5, t); 
-        noiseGain.gain.exponentialRampToValueAtTime(0.001, t + 0.015); 
-        noiseSrc.connect(noiseFilter).connect(noiseGain).connect(audioCtx.destination);
-        noiseSrc.start(t); noiseSrc.stop(t + 0.02);
+        // High frequency click
+        let osc1 = audioCtx.createOscillator();
+        let gain1 = audioCtx.createGain();
+        osc1.type = 'sine';
+        osc1.frequency.setValueAtTime(2000, t);
+        osc1.frequency.exponentialRampToValueAtTime(100, t + 0.05);
+        gain1.gain.setValueAtTime(vol * 0.8, t);
+        gain1.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+        osc1.connect(gain1).connect(audioCtx.destination);
+        osc1.start(t); osc1.stop(t + 0.05);
 
-        modes.forEach(mode => {
-            let osc = audioCtx.createOscillator();
-            let gain = audioCtx.createGain();
-            osc.type = 'sine';
-            osc.frequency.setValueAtTime(baseFreq * mode.f, t);
-            osc.frequency.exponentialRampToValueAtTime(baseFreq * mode.f * 0.96, t + duration * mode.d);
-            gain.gain.setValueAtTime(vol * mode.a, t);
-            gain.gain.exponentialRampToValueAtTime(0.001, t + duration * mode.d);
-            osc.connect(gain).connect(audioCtx.destination);
-            osc.start(t); osc.stop(t + duration * mode.d);
-        });
+        // Woody body resonance
+        let osc2 = audioCtx.createOscillator();
+        let gain2 = audioCtx.createGain();
+        osc2.type = 'triangle';
+        osc2.frequency.setValueAtTime(400, t);
+        osc2.frequency.exponentialRampToValueAtTime(200, t + 0.1);
+        gain2.gain.setValueAtTime(vol * 0.6, t);
+        gain2.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+        osc2.connect(gain2).connect(audioCtx.destination);
+        osc2.start(t); osc2.stop(t + 0.1);
+        
+        // Noise transient
+        if(noiseBuffer) {
+            let noiseSrc = audioCtx.createBufferSource();
+            noiseSrc.buffer = noiseBuffer;
+            let noiseFilter = audioCtx.createBiquadFilter();
+            noiseFilter.type = 'bandpass';
+            noiseFilter.frequency.value = 1500;
+            noiseFilter.Q.value = 1.0;
+            let noiseGain = audioCtx.createGain();
+            noiseGain.gain.setValueAtTime(vol * 0.5, t);
+            noiseGain.gain.exponentialRampToValueAtTime(0.001, t + 0.03);
+            noiseSrc.connect(noiseFilter).connect(noiseGain).connect(audioCtx.destination);
+            noiseSrc.start(t); noiseSrc.stop(t + 0.03);
+        }
+    }
+
+    function playPocketDrop(vol) {
+        if(!audioReady) return;
+        if(audioCtx.state === 'suspended') audioCtx.resume();
+        let t = audioCtx.currentTime;
+        
+        // Thud sound
+        let osc = audioCtx.createOscillator();
+        let gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(150, t);
+        osc.frequency.exponentialRampToValueAtTime(40, t + 0.15);
+        gain.gain.setValueAtTime(vol * 0.8, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+        osc.connect(gain).connect(audioCtx.destination);
+        osc.start(t); osc.stop(t + 0.15);
+        
+        // Net/wood rattle (noise)
+        if(noiseBuffer) {
+            let noiseSrc = audioCtx.createBufferSource();
+            noiseSrc.buffer = noiseBuffer;
+            let noiseFilter = audioCtx.createBiquadFilter();
+            noiseFilter.type = 'lowpass';
+            noiseFilter.frequency.value = 800;
+            let noiseGain = audioCtx.createGain();
+            noiseGain.gain.setValueAtTime(vol * 0.4, t);
+            noiseGain.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+            noiseSrc.connect(noiseFilter).connect(noiseGain).connect(audioCtx.destination);
+            noiseSrc.start(t); noiseSrc.stop(t + 0.2);
+        }
+    }
+
+    function playFoulSound() {
+        if(!audioReady) return;
+        if(audioCtx.state === 'suspended') audioCtx.resume();
+        let t = audioCtx.currentTime;
+        let osc = audioCtx.createOscillator();
+        let gain = audioCtx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(150, t);
+        osc.frequency.linearRampToValueAtTime(100, t + 0.3);
+        gain.gain.setValueAtTime(0.3, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+        
+        let filter = audioCtx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(1000, t);
+        filter.frequency.linearRampToValueAtTime(200, t + 0.3);
+        
+        osc.connect(filter).connect(gain).connect(audioCtx.destination);
+        osc.start(t); osc.stop(t + 0.3);
     }
 
     const sounds = {
         playHit: function(impulse) {
             let vol = Math.min(1, impulse / 5) * 1.5;
             if(vol < 0.01) return;
-            playPhysicalImpact(1100, [ {f: 1.0, a: 1.0, d: 1.0}, {f: 1.8, a: 0.6, d: 0.7}, {f: 2.5, a: 0.4, d: 0.4}, {f: 3.8, a: 0.2, d: 0.2} ], 0.035, vol);
+            playWoodClack(vol);
         },
         playWall: function(vel) {
             let vol = Math.min(1, Math.abs(vel) / 5) * 1.5;
             if(vol < 0.01) return;
-            playPhysicalImpact(220, [ {f: 1.0, a: 1.0, d: 1.0}, {f: 1.7, a: 0.7, d: 0.8}, {f: 2.6, a: 0.4, d: 0.5} ], 0.09, vol);
+            playWoodClack(vol * 0.7);
         },
         playPocket: function() {
-            if(!audioReady) return;
-            if(audioCtx.state === 'suspended') audioCtx.resume();
-            for(let i=0; i<3; i++) {
-                setTimeout(() => {
-                    let vol = 1.0 - (i * 0.15);
-                    playPhysicalImpact(450 + (Math.random()*100), [ {f: 1.0, a: 1.0, d: 1.0}, {f: 2.1, a: 0.5, d: 0.6} ], 0.04, vol);
-                }, i * 45 + (Math.random() * 15));
-            }
+            playPocketDrop(1.0);
         },
         playFoul: function() {
-            if(!audioReady) return;
-            if(audioCtx.state === 'suspended') audioCtx.resume();
-            let t = audioCtx.currentTime;
-            let osc = audioCtx.createOscillator();
-            let gain = audioCtx.createGain();
-            osc.type = 'triangle';
-            osc.frequency.setValueAtTime(120, t);
-            osc.frequency.exponentialRampToValueAtTime(40, t + 0.2);
-            gain.gain.setValueAtTime(1.0, t);
-            gain.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
-            osc.connect(gain).connect(audioCtx.destination);
-            osc.start(t); osc.stop(t + 0.25);
+            playFoulSound();
         }
     };
 
@@ -610,19 +659,19 @@ export default function App() {
             if (this.color === 'white') { 
                 grad.addColorStop(0, '#ffffff'); 
                 grad.addColorStop(0.8, '#e2e8f0'); 
-                grad.addColorStop(1, '#cbd5e1'); 
+                grad.addColorStop(1, '#94a3b8'); 
             } else if (this.color === 'black') { 
-                grad.addColorStop(0, '#52525b'); 
+                grad.addColorStop(0, '#71717a'); 
                 grad.addColorStop(0.8, '#27272a'); 
-                grad.addColorStop(1, '#09090b'); 
+                grad.addColorStop(1, '#000000'); 
             } else if (this.type === 'queen') { 
                 grad.addColorStop(0, '#fef08a'); 
                 grad.addColorStop(0.6, '#eab308'); 
-                grad.addColorStop(1, '#a16207'); 
+                grad.addColorStop(1, '#854d0e'); 
             } else { // Striker
                 grad.addColorStop(0, '#fca5a5'); 
                 grad.addColorStop(0.5, '#ef4444'); 
-                grad.addColorStop(1, '#991b1b'); 
+                grad.addColorStop(1, '#7f1d1d'); 
             }
 
             ctx.fillStyle = grad;
@@ -730,25 +779,24 @@ export default function App() {
     }
 
     function drawBoardUI() {
-        let bgGrad = ctx.createLinearGradient(0, 0, 350, 350);
-        bgGrad.addColorStop(0, '#e8c396'); 
-        bgGrad.addColorStop(0.5, '#dcb282'); 
-        bgGrad.addColorStop(1, '#c89b68');
+        let bgGrad = ctx.createRadialGradient(175, 175, 50, 175, 175, 250);
+        bgGrad.addColorStop(0, '#f5d0a9'); 
+        bgGrad.addColorStop(1, '#d2a679');
         ctx.fillStyle = bgGrad; ctx.fillRect(0, 0, 350, 350);
         
-        const lineColor = "rgba(0, 0, 0, 0.6)";
+        const lineColor = "rgba(0, 0, 0, 0.5)";
         const redColor = "#dc2626";
 
         pockets.forEach(p => { 
             let pGrad = ctx.createRadialGradient(p.x, p.y, POCKET_RADIUS * 0.2, p.x, p.y, POCKET_RADIUS);
-            pGrad.addColorStop(0, '#000000'); pGrad.addColorStop(0.8, '#111'); pGrad.addColorStop(1, '#222');
+            pGrad.addColorStop(0, '#000000'); pGrad.addColorStop(0.7, '#1a1a1a'); pGrad.addColorStop(1, '#333333');
             ctx.fillStyle = pGrad;
             ctx.beginPath(); ctx.arc(p.x, p.y, POCKET_RADIUS, 0, Math.PI * 2); ctx.fill(); 
-            ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 2;
+            ctx.strokeStyle = "rgba(0,0,0,0.4)"; ctx.lineWidth = 2;
             ctx.beginPath(); ctx.arc(p.x, p.y, POCKET_RADIUS + 1, 0, Math.PI * 2); ctx.stroke();
         });
         
-        ctx.strokeStyle = lineColor; ctx.lineWidth = 1;
+        ctx.strokeStyle = lineColor; ctx.lineWidth = 1.5;
         ctx.beginPath(); ctx.moveTo(45,45); ctx.lineTo(100,100); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(305,45); ctx.lineTo(250,100); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(45,305); ctx.lineTo(100,250); ctx.stroke();
@@ -776,17 +824,17 @@ export default function App() {
         }
         
         const drawBaseLine = (x1, y1, x2, y2, isRedLeft) => {
-            ctx.strokeStyle = lineColor; ctx.lineWidth = 1;
+            ctx.strokeStyle = lineColor; ctx.lineWidth = 1.5;
             if (y1 === y2) { 
                 ctx.beginPath(); ctx.moveTo(x1, y1 - 10); ctx.lineTo(x2, y2 - 10); ctx.stroke();
                 ctx.beginPath(); ctx.moveTo(x1, y1 + 10); ctx.lineTo(x2, y2 + 10); ctx.stroke();
-                ctx.beginPath(); ctx.arc(x1, y1, 10, 0, Math.PI*2); ctx.fillStyle = isRedLeft ? redColor : 'transparent'; ctx.fill(); ctx.stroke();
-                ctx.beginPath(); ctx.arc(x2, y2, 10, 0, Math.PI*2); ctx.fillStyle = !isRedLeft ? redColor : 'transparent'; ctx.fill(); ctx.stroke();
+                ctx.beginPath(); ctx.arc(x1, y1, 10, 0, Math.PI*2); ctx.fillStyle = isRedLeft ? redColor : '#f5d0a9'; ctx.fill(); ctx.stroke();
+                ctx.beginPath(); ctx.arc(x2, y2, 10, 0, Math.PI*2); ctx.fillStyle = !isRedLeft ? redColor : '#f5d0a9'; ctx.fill(); ctx.stroke();
             } else { 
                 ctx.beginPath(); ctx.moveTo(x1 - 10, y1); ctx.lineTo(x2 - 10, y2); ctx.stroke();
                 ctx.beginPath(); ctx.moveTo(x1 + 10, y1); ctx.lineTo(x2 + 10, y2); ctx.stroke();
-                ctx.beginPath(); ctx.arc(x1, y1, 10, 0, Math.PI*2); ctx.fillStyle = isRedLeft ? redColor : 'transparent'; ctx.fill(); ctx.stroke();
-                ctx.beginPath(); ctx.arc(x2, y2, 10, 0, Math.PI*2); ctx.fillStyle = !isRedLeft ? redColor : 'transparent'; ctx.fill(); ctx.stroke();
+                ctx.beginPath(); ctx.arc(x1, y1, 10, 0, Math.PI*2); ctx.fillStyle = isRedLeft ? redColor : '#f5d0a9'; ctx.fill(); ctx.stroke();
+                ctx.beginPath(); ctx.arc(x2, y2, 10, 0, Math.PI*2); ctx.fillStyle = !isRedLeft ? redColor : '#f5d0a9'; ctx.fill(); ctx.stroke();
             }
         };
 
